@@ -221,7 +221,7 @@ pub async fn generate_text(
         text_generation_config.show_reasoning,
     );
 
-    Ok(TextGenerationResult { text })
+    Ok(TextGenerationResult::text_only(text))
 }
 
 /// Builds the prompt-cache routing key from conversation-stable inputs. `DefaultHasher::new()` is a

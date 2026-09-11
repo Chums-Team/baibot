@@ -193,9 +193,7 @@ impl ControllerTrait for Controller {
             if let OutputItem::Message(message) = item {
                 for content in message.content {
                     if let OutputMessageContent::OutputText(text_content) = content {
-                        return Ok(TextGenerationResult {
-                            text: text_content.text,
-                        });
+                        return Ok(TextGenerationResult::text_only(text_content.text));
                     }
                 }
             }

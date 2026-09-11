@@ -190,9 +190,7 @@ impl ControllerTrait for Controller {
             ));
         }
 
-        Ok(TextGenerationResult {
-            text: text_parts.join("\n\n"),
-        })
+        Ok(TextGenerationResult::text_only(text_parts.join("\n\n")))
     }
 
     async fn speech_to_text(

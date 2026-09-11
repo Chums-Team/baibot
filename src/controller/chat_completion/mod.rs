@@ -627,6 +627,7 @@ async fn handle_stage_text_generation(
         agent_id = agent.identifier().as_string(),
         provider = format!("{}", agent.definition().provider.clone()),
         ?duration,
+        usage = ?result.as_ref().ok().and_then(|result| result.usage.as_ref()),
         "Done with LLM text generation"
     );
 

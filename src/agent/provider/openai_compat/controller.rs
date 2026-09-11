@@ -11,7 +11,7 @@ use crate::{
     agent::provider::{
         ImageEditParams, ImageGenerationParams, ImageSource, SpeechToTextParams,
         SpeechToTextResult,
-        entity::{TextGenerationParams, TextGenerationResult},
+        entity::{TextGenerationParams, TextGenerationResult, TextGenerationUsage},
     },
     conversation::llm::{
         Author as LLMAuthor, Conversation as LLMConversation, Message as LLMMessage,
@@ -189,6 +189,14 @@ impl ControllerTrait for Controller {
             "Got response from the OpenAI-compat chat completion API"
         );
 
+        // Token counts are part of the standard OpenAI `usage` object, which the library
+        // already deserializes. The cost is not reported by the chat completion API.
+        let usage = TextGenerationUsage {
+            cost_usd: None,
+            prompt_tokens: response.usage.prompt_tokens,
+            completion_tokens: response.usage.completion_tokens,
+        };
+
         // We only request 1 result, so there should only be 1 choice.
         if let Some(choice) = response.choices.into_iter().next() {
             let Some(message) = choice.message else {
@@ -199,6 +207,7 @@ impl ControllerTrait for Controller {
 
             return Ok(TextGenerationResult {
                 text: message.content,
+                usage: Some(usage),
             });
         }
 
