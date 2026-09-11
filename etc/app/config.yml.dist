@@ -171,6 +171,33 @@ initial_global_config:
   user_patterns:
     - "@*:__HOMESERVER_SERVER_NAME__"
 
+# Optional billing of LLM calls, backed by an append-only ledger (SQLite).
+# Remove or comment out the whole section to run without billing.
+# Every key is optional; the values below are the defaults. See docs/configuration/billing.md.
+#
+# billing:
+#   # Amount (USD) held off the room balance while a single LLM call is in flight.
+#   reserve_amount_usd: 0.03
+#   # Multiplier applied to the provider's cost (1.0 = at cost, 2.0 = double).
+#   markup_pct: 2.0
+#   # Bot-wide spending caps per UTC calendar day and month.
+#   daily_cap_usd: 50.0
+#   monthly_cap_usd: 1000.0
+#   # Bounds for a single top-up request from a user.
+#   min_topup_usd: 0.10
+#   max_topup_usd: 1.0
+#   # Full Matrix user ids allowed to run billing administration commands.
+#   admin_mxids:
+#     - "@admin:__HOMESERVER_SERVER_NAME__"
+#   # Path to the ledger file. Defaults to `billing.db` inside `persistence.data_dir_path`.
+#   db_path: null
+#   # Fallback prices (USD per million tokens) used when the provider does not report
+#   # the cost of a call. Entries add to (or override) the built-in table.
+#   pricing:
+#     x-ai/grok-4.20:
+#       input_usd_per_million_tokens: 1.25
+#       output_usd_per_million_tokens: 2.5
+
 # Controls logging.
 #
 # Sets all tracing targets (external crates) to warn, and our own logs to debug.

@@ -24,6 +24,8 @@ You can see the list of supported environment variables in the [🦀 src/entity/
 
 For Matrix-account authentication setup, see [🔐 Authentication](./authentication.md).
 
+For the optional accounting of LLM calls, see [💰 Billing](./billing.md).
+
 
 ### Dynamic configuration
 

@@ -18,7 +18,7 @@ pub mod wrapper;
 mod tests;
 
 pub use ledger::BillingService;
-pub use pricing::{ModelPrice, PRICING_TABLE_REVISION, compute_fallback, lookup};
+pub use pricing::{ModelPrice, PRICING_TABLE_REVISION, PricingTable};
 pub use types::{BillingError, BillingEvent, BillingEventType, Period, ZombieReserve};
 pub use wrapper::{
     BillingWrapperConfig, ChargeBreakdown, PreCheckOutcome, compute_charge, new_correlation_id,

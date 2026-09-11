@@ -34,6 +34,10 @@ pub struct Config {
 
     #[serde(default = "super::defaults::logging")]
     pub logging: String,
+
+    /// Optional. When absent, the bot runs without billing.
+    #[serde(default)]
+    pub billing: Option<super::billing::ConfigBilling>,
 }
 
 impl Config {
@@ -53,6 +57,10 @@ impl Config {
 
         self.agents.validate()?;
         self.initial_global_config.clone().validate()?;
+
+        if let Some(billing) = &self.billing {
+            billing.validate()?;
+        }
 
         Ok(())
     }
@@ -292,7 +300,7 @@ impl PersistenceConfig {
         Ok(())
     }
 
-    pub fn session_file_path(&self) -> anyhow::Result<PathBuf> {
+    pub fn data_dir_path_or_err(&self) -> anyhow::Result<PathBuf> {
         let Some(data_dir_path) = &self.data_dir_path else {
             return Err(anyhow::anyhow!(
                 "The persistence.data_dir_path ({}) directory must be set",
@@ -300,21 +308,18 @@ impl PersistenceConfig {
             ));
         };
 
-        let mut path = PathBuf::from(data_dir_path);
+        Ok(PathBuf::from(data_dir_path))
+    }
+
+    pub fn session_file_path(&self) -> anyhow::Result<PathBuf> {
+        let mut path = self.data_dir_path_or_err()?;
         path.push(&self.session_file_name);
 
         Ok(path)
     }
 
     pub fn db_dir_path(&self) -> anyhow::Result<PathBuf> {
-        let Some(data_dir_path) = &self.data_dir_path else {
-            return Err(anyhow::anyhow!(
-                "The persistence.data_dir_path ({}) directory must be set",
-                super::env::BAIBOT_PERSISTENCE_DATA_DIR_PATH
-            ));
-        };
-
-        let mut path = PathBuf::from(data_dir_path);
+        let mut path = self.data_dir_path_or_err()?;
         path.push(&self.db_dir_name);
 
         Ok(path)

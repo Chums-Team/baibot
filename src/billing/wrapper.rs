@@ -22,7 +22,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use super::ledger::BillingService;
-use super::pricing;
+use super::pricing::PricingTable;
 use super::types::{BillingError, Period};
 
 /// Read from `global_config.billing` (or env defaults) at the call site.
@@ -119,7 +119,7 @@ pub struct ChargeBreakdown {
     /// `true` if the OpenRouter response lacked `usage.cost` and we fell
     /// back to the per-token pricing table.
     pub used_fallback_pricing: bool,
-    /// Pricing table revision (constant from `pricing.rs`). Useful when a
+    /// Pricing table revision (see `PricingTable::revision`). Useful when a
     /// price update changes ledger entries but old charges remain valid.
     pub pricing_revision: String,
 }
@@ -147,11 +147,12 @@ impl ChargeBreakdown {
 /// Resolve the cost of a single LLM call, applying markup.
 ///
 /// Prefers OpenRouter's authoritative `usage.cost` field. Falls back to
-/// `pricing::compute_fallback` when the field is missing or zero on a
+/// `PricingTable::compute_fallback` when the field is missing or zero on a
 /// non-free-tier model. Returns `None` when both sources fail (unknown
 /// model + missing usage.cost) — caller should treat as a logic bug,
 /// log loudly, and leave the reserve hanging for manual review.
 pub fn compute_charge(
+    pricing: &PricingTable,
     usage_cost_usd: Option<f64>,
     model_id: &str,
     prompt_tokens: u32,
@@ -170,7 +171,7 @@ pub fn compute_charge(
         }
         _ => {
             used_fallback = true;
-            pricing::compute_fallback(model_id, prompt_tokens, completion_tokens)?
+            pricing.compute_fallback(model_id, prompt_tokens, completion_tokens)?
         }
     };
 
@@ -180,7 +181,7 @@ pub fn compute_charge(
         markup_pct,
         charged_usd: charged,
         used_fallback_pricing: used_fallback,
-        pricing_revision: pricing::PRICING_TABLE_REVISION.to_string(),
+        pricing_revision: pricing.revision().to_owned(),
     })
 }
 
@@ -278,12 +279,19 @@ mod tests {
 
     #[test]
     fn compute_charge_prefers_openrouter_cost_when_present() {
-        let r = compute_charge(Some(0.005), "minimax/minimax-m2.7-20260318", 1000, 500, 2.0)
-            .expect("should resolve");
+        let r = compute_charge(
+            &PricingTable::builtin(),
+            Some(0.005),
+            "minimax/minimax-m2.7-20260318",
+            1000,
+            500,
+            2.0,
+        )
+        .expect("should resolve");
         assert!((r.actual_cost_usd - 0.005).abs() < 1e-12);
         assert!((r.charged_usd - 0.010).abs() < 1e-12);
         assert!(!r.used_fallback_pricing);
-        assert_eq!(r.pricing_revision, pricing::PRICING_TABLE_REVISION);
+        assert_eq!(r.pricing_revision, crate::billing::PRICING_TABLE_REVISION);
     }
 
     #[test]
@@ -293,6 +301,7 @@ mod tests {
         // records `used_fallback_pricing=false` so audits can tell the
         // call did NOT estimate.
         let r = compute_charge(
+            &PricingTable::builtin(),
             Some(0.0024),
             "minimax/minimax-m2.7-20260318",
             1234,
@@ -317,8 +326,15 @@ mod tests {
 
     #[test]
     fn compute_charge_falls_back_when_cost_missing() {
-        let r = compute_charge(None, "minimax/minimax-m2.7-20260318", 1000, 500, 2.0)
-            .expect("fallback table should resolve");
+        let r = compute_charge(
+            &PricingTable::builtin(),
+            None,
+            "minimax/minimax-m2.7-20260318",
+            1000,
+            500,
+            2.0,
+        )
+        .expect("fallback table should resolve");
         // 1000 * 0.0000003 + 500 * 0.0000012 = 0.0009 ; * 2 = 0.0018
         assert!((r.actual_cost_usd - 0.0009).abs() < 1e-12);
         assert!((r.charged_usd - 0.0018).abs() < 1e-12);
@@ -329,8 +345,15 @@ mod tests {
     fn compute_charge_falls_back_when_cost_zero_for_paid_model() {
         // Some OpenRouter responses have erroneously returned 0 — treat
         // as missing for paid models. Free model legitimately costs 0.
-        let r = compute_charge(Some(0.0), "minimax/minimax-m2.7-20260318", 100, 50, 2.0)
-            .expect("fallback should kick in");
+        let r = compute_charge(
+            &PricingTable::builtin(),
+            Some(0.0),
+            "minimax/minimax-m2.7-20260318",
+            100,
+            50,
+            2.0,
+        )
+        .expect("fallback should kick in");
         assert!(r.used_fallback_pricing);
         assert!(r.actual_cost_usd > 0.0);
     }
@@ -339,12 +362,15 @@ mod tests {
     fn compute_charge_returns_none_for_unknown_model_without_cost() {
         // Both sources fail — caller should bail out (don't charge anything,
         // log loudly, leave reserve hanging for manual review).
-        assert!(compute_charge(None, "acme/nope", 100, 50, 2.0).is_none());
+        assert!(
+            compute_charge(&PricingTable::builtin(), None, "acme/nope", 100, 50, 2.0).is_none()
+        );
     }
 
     #[test]
     fn compute_charge_returns_zero_for_free_model() {
         let r = compute_charge(
+            &PricingTable::builtin(),
             None,
             "minimax/minimax-m2.5:free-20260211",
             10000,

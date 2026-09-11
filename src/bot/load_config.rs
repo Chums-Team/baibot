@@ -5,7 +5,9 @@ use anyhow::anyhow;
 
 use crate::agent::AgentPurpose;
 
-pub use crate::entity::cfg::{Avatar, Config, defaults as cfg_defaults, env as cfg_env};
+pub use crate::entity::cfg::{
+    Avatar, Config, ConfigBilling, defaults as cfg_defaults, env as cfg_env,
+};
 
 pub fn load() -> anyhow::Result<Config> {
     let config_file_path = env::var(cfg_env::BAIBOT_CONFIG_FILE_PATH)
@@ -120,6 +122,34 @@ pub fn load() -> anyhow::Result<Config> {
                         .collect(),
                 );
             }
+            cfg_env::BAIBOT_BILLING_RESERVE_AMOUNT_USD => {
+                billing_section(&mut config).reserve_amount_usd = parse_f64(&key, &value)?;
+            }
+            cfg_env::BAIBOT_BILLING_MARKUP_PCT => {
+                billing_section(&mut config).markup_pct = parse_f64(&key, &value)?;
+            }
+            cfg_env::BAIBOT_BILLING_DAILY_CAP_USD => {
+                billing_section(&mut config).daily_cap_usd = parse_f64(&key, &value)?;
+            }
+            cfg_env::BAIBOT_BILLING_MONTHLY_CAP_USD => {
+                billing_section(&mut config).monthly_cap_usd = parse_f64(&key, &value)?;
+            }
+            cfg_env::BAIBOT_BILLING_MIN_TOPUP_USD => {
+                billing_section(&mut config).min_topup_usd = parse_f64(&key, &value)?;
+            }
+            cfg_env::BAIBOT_BILLING_MAX_TOPUP_USD => {
+                billing_section(&mut config).max_topup_usd = parse_f64(&key, &value)?;
+            }
+            cfg_env::BAIBOT_BILLING_ADMIN_MXIDS => {
+                billing_section(&mut config).admin_mxids = value
+                    .split(' ')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+            }
+            cfg_env::BAIBOT_BILLING_DB_PATH => {
+                billing_section(&mut config).db_path = optional_non_empty(value);
+            }
             _ => {}
         }
     }
@@ -131,4 +161,16 @@ pub fn load() -> anyhow::Result<Config> {
 
 fn optional_non_empty(value: String) -> Option<String> {
     if value.is_empty() { None } else { Some(value) }
+}
+
+/// Setting any `BAIBOT_BILLING_*` variable enables billing even when the configuration
+/// file has no `billing` section, so a deployment can turn it on from the environment alone.
+fn billing_section(config: &mut Config) -> &mut ConfigBilling {
+    config.billing.get_or_insert_with(ConfigBilling::default)
+}
+
+fn parse_f64(key: &str, value: &str) -> anyhow::Result<f64> {
+    value
+        .parse::<f64>()
+        .map_err(|e| anyhow!("The {key} environment variable must be a number: {e}"))
 }
