@@ -5,6 +5,7 @@
 #![recursion_limit = "256"]
 
 mod agent;
+mod billing;
 mod bot;
 mod controller;
 mod conversation;

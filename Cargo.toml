@@ -19,7 +19,7 @@ anthropic = { git = "https://github.com/etkecc/anthropic-rs.git", branch = "fix-
 anyhow = "1.0.*"
 async-openai = { version = "0.42.0", features = ["audio", "chat-completion", "image", "responses"] }
 base64 = "0.23.*"
-chrono = { version = "0.4.*", default-features = false, features = ["std", "now"] }
+chrono = { version = "0.4.*", default-features = false, features = ["std", "now", "serde"] }
 # We'd rather not depend on this, but we cannot use the ruma-events EventContent macro without it.
 matrix-sdk = { version = "0.18.0", default-features = false }
 mime_guess = "2.0.*"
@@ -40,6 +40,13 @@ tokio = { version = "1.53.*", features = ["rt", "rt-multi-thread", "macros"] }
 tracing = "0.1.*"
 tracing-subscriber = { version = "0.3.*", features = ["env-filter"] }
 url = "2.5.*"
+
+# Billing ledger (see `src/billing`).
+# rusqlite is pinned to the version matrix-sdk-sqlite links against: `libsqlite3-sys`
+# can only be linked once per binary.
+rusqlite = { version = "0.37", features = ["bundled", "chrono"] }
+thiserror = "1.0"
+uuid = { version = "1.10", features = ["v7", "serde"] }
 
 [profile.release]
 strip = true
