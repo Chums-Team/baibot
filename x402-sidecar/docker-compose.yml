@@ -1,0 +1,30 @@
+# Sidecar compose. Pairs with the bot's docker-compose.yml (repository
+# root) on the external network `himari-shared` so the bot can POST to
+# the sidecar at `http://x402-sidecar:8402` and the sidecar can POST
+# settlement notifications to `http://bot:9000/internal/x402-settled`.
+#
+# Create the network once:  docker network create himari-shared
+services:
+  x402-sidecar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: himari-x402-sidecar:0.2.0
+    container_name: himari-x402-sidecar
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      # Host loopback exposure is for ops curl /health from the host.
+      # Bot-to-sidecar traffic flows over the shared Docker network and
+      # does not need this mapping. For exposing to LAN, change to "0.0.0.0:8402:8402".
+      - "127.0.0.1:8402:8402"
+    volumes:
+      # Persist sidecar SQLite (payment-id ↔ context mapping).
+      - ./data:/app/data
+    networks:
+      - himari-shared
+
+networks:
+  himari-shared:
+    external: true

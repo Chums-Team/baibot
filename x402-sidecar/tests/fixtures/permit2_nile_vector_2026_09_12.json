@@ -1,0 +1,106 @@
+{
+  "_about": "Ground-truth vector captured 2026-09-12 against the hosted BofAI x402 facilitator v2 on TRON nile. Signed by test buyer TGVvAYNsroS1c25q2gvmoSFkvEdy3Qdmbz (key in scripts/, gitignored). /verify -> isValid, /settle -> tx f026a093... (block 70909072, Transfer 10000 micro-USDT buyer->agent). Use to pin our EIP-712 encoder + wire shape; do not edit.",
+  "network": "tron:0xcd8690dc",
+  "buyer_base58": "TGVvAYNsroS1c25q2gvmoSFkvEdy3Qdmbz",
+  "domain": {
+    "name": "Permit2",
+    "chainId": 3448148188,
+    "verifyingContract": "0xf62f506d1faa02e2354a9886b4a200496ee96f4b"
+  },
+  "types": {
+    "PermitWitnessTransferFrom": [
+      {
+        "name": "permitted",
+        "type": "TokenPermissions"
+      },
+      {
+        "name": "spender",
+        "type": "address"
+      },
+      {
+        "name": "nonce",
+        "type": "uint256"
+      },
+      {
+        "name": "deadline",
+        "type": "uint256"
+      },
+      {
+        "name": "witness",
+        "type": "Witness"
+      }
+    ],
+    "TokenPermissions": [
+      {
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "Witness": [
+      {
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "name": "validAfter",
+        "type": "uint256"
+      }
+    ]
+  },
+  "permit2Authorization": {
+    "from": "0x479f985951446f042d2ddaa4b3013ff909852ba9",
+    "permitted": {
+      "token": "0xeca9bc828a3005b9a3b909f2cc5c2a54794de05f",
+      "amount": "10000"
+    },
+    "spender": "0x3a2c916ce2b40f0ffc06cc80c0f72c0fc25be105",
+    "nonce": "50922659055195473993838219768679703337588858060814537889056901784433453686534",
+    "deadline": "1789249770",
+    "witness": {
+      "to": "0xb81a145560d9d0b72f455db8c3f7d04642a171eb",
+      "validAfter": "0"
+    }
+  },
+  "digest": "0xfbb084c8be7ce199b0c634d2d049ee4baec43e3252f04cb9cd6640b169f17a83",
+  "signature": "0xc253218277dc8b00c9adbf0d07f4b3b717057de5416cea16fdc1cc3e21839f727318853fa1ff817c10dbbe96498b89456ae42c17d35e4b7f283516b8fb7d8e6d1c",
+  "paymentRequirements": {
+    "scheme": "exact",
+    "network": "tron:0xcd8690dc",
+    "amount": "10000",
+    "asset": "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf",
+    "payTo": "TSkeaPMSuaojcCzE7mWqw4xN1awU7NfdfY",
+    "maxTimeoutSeconds": 300,
+    "extra": {
+      "assetTransferMethod": "permit2"
+    }
+  },
+  "verify_response": {
+    "isValid": true,
+    "payer": "0x479f985951446f042d2ddaa4b3013ff909852ba9"
+  },
+  "settle_response": {
+    "success": true,
+    "transaction": "f026a093f8de179efe2a15ac111f4060f1ca1793806c4764c5f4807598caf8ef",
+    "network": "tron:0xcd8690dc",
+    "payer": "0x479f985951446f042d2ddaa4b3013ff909852ba9"
+  },
+  "lookup_response": [
+    {
+      "network": "tron:0xcd8690dc",
+      "scheme": "exact",
+      "asset": "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf",
+      "payer": "0x479f985951446f042d2ddaa4b3013ff909852ba9",
+      "nonce": "50922659055195473993838219768679703337588858060814537889056901784433453686534",
+      "amount": "10000",
+      "txHash": "f026a093f8de179efe2a15ac111f4060f1ca1793806c4764c5f4807598caf8ef",
+      "status": "success",
+      "errorReason": null,
+      "createdAt": "2026-09-12T21:44:35.914Z"
+    }
+  ],
+  "approve_tx": "c47847347df74476e6cce3e26ac6ee0aaa243544cfb7e9daca6c287db0095375"
+}

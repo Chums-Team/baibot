@@ -1,0 +1,23 @@
+# Local secrets — never commit.
+.env
+.env.local
+.env.*.local
+
+# Local data + DB.
+/data
+*.db
+*.db-shm
+*.db-wal
+
+# Python build / cache.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+.venv*/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
