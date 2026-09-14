@@ -9,4 +9,5 @@
 - [☁️ Providers](./providers.md)
 - [📖 Usage](./usage.md)
 - [🚀 Installation](./installation.md)
+- [📓 Runbook: the bot with x402 top-ups](./runbook.md)
 - [💻 Development](./development.md)

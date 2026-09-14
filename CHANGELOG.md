@@ -1,3 +1,24 @@
+# (unreleased) `chums` branch
+
+Changes of the [Chums-Team/baibot](https://github.com/Chums-Team/baibot) `chums` branch on top of upstream baibot 1.26.0. Everything here is optional: without the new configuration sections the bot behaves like upstream.
+
+- (**Feature**) [💰 Billing](./docs/configuration/billing.md): an optional `billing` section turns on an append-only SQLite ledger of the money spent per room. Every text-generation call reserves an amount, charges the provider's real cost with a markup ([OpenRouter](./docs/providers.md) reports it per call; other providers are charged by a configurable pricing table) and releases the rest; a room that cannot afford the next reply is told so instead of calling the provider. Bot-wide daily and monthly spending caps. Chat commands `balance`, `stats`, `billing zombies`, `billing manual-release`, `billing manual-refund`, the last three for the administrators listed in `billing.admin_mxids`.
+
+- (**Feature**) [💸 x402 top-ups](./docs/configuration/x402.md): an optional `x402` section lets users pay USDT (TRC-20) on TRON into a room's balance through the payment sidecar added under [`x402-sidecar/`](./x402-sidecar/README.md) (a Python service fronting an x402 v2 facilitator, with Permit2 payment requests, `/verify` + `/settle` and a facilitator readiness watch). The bot asks the sidecar for a payment request when a room runs out of balance or on the `topup [<amount_usd>]` command, and credits the room when the sidecar reports a settlement on an HMAC-authenticated internal endpoint.
+
+- (**Feature**) [📡 Matrix events for the Chums client](./docs/matrix-events.md): `cc.chums.x402_request`, `cc.chums.cap_hit` and `cc.chums.x402_topup_confirmed` are sent alongside the text messages so the client can render a payment widget, a cap banner and a top-up confirmation; `cc.chums.set_user_locale` is accepted from the client. USD amounts travel as strings, as Matrix canonical JSON forbids floats.
+
+- (**Feature**) [🌍 Localization](./docs/configuration/i18n.md): the replies added for the Chums client are sent in the user's language (de, en, es, fr, id, pt, ru, sr, embedded at build time with [rust-i18n](https://crates.io/crates/rust-i18n)); users without a declared locale get `i18n.fallback_locale`. Upstream messages and the administration commands stay English.
+
+- (**Feature**) [Introduction after joining a room](./docs/configuration/i18n.md#introduction-after-joining-a-room): `room.post_join_self_introduction_text` replaces the built-in introduction with a text per locale, sent in the language of the inviting user.
+
+- (**Feature**) [🚧 Administrator-only commands](./docs/access.md#-administrator-only-commands): `access.commands_admin_only` reserves the bot's commands for `access.admin_patterns`, except the heads listed in `access.commands_admin_exempt` (`balance`, `topup`, `image` by default); conversation is unaffected.
+
+- (**Improvement**) Deployment: [`docker-compose.yml`](./docker-compose.yml) and [`.env.example`](./.env.example) run the bot next to the sidecar on a shared Docker network, with a [📓 Runbook](./docs/runbook.md) from a clean host to a verified payment. The container image now executes the binary directly, so `docker stop` shuts the bot down gracefully. CI also runs the sidecar's tests; images are published to `ghcr.io/chums-team/baibot` from the `chums` branch (tag `chums`) and from `v*` tags.
+
+- (**Internal Improvement**) `TextGenerationResult` carries the usage reported by the provider (cost and token counts), which the billing reads; every provider fills what it has.
+
+
 # (2026-09-10) Version 1.26.0
 
 - (**Improvement**) Default newly-created [OpenAI agents](./docs/providers.md#openai) and sample configurations to `gpt-image-2.5-sunburst`. Add support for GPT Image 2.5 Sunburst and Flare, including their dated snapshots and `xhigh` / `max` quality settings.

@@ -87,6 +87,8 @@ services:
 
 💡 If you've defined the `persistence.data_dir_path` setting in the `config.yml` file, you can skip the `BAIBOT_PERSISTENCE_DATA_DIR_PATH` environment variable.
 
+💡 For a deployment with [💰 Billing](./configuration/billing.md) and [💸 x402 top-ups](./configuration/x402.md), the repository's own [`docker-compose.yml`](../docker-compose.yml) runs the bot next to the payment sidecar; the procedure is in the [📓 Runbook](./runbook.md).
+
 
 ### 🔨 Building a binary
 

@@ -49,6 +49,6 @@ WORKDIR /app
 
 COPY --from=build /baibot .
 
-ENTRYPOINT ["/bin/sh", "-c"]
-
-CMD ["/app/baibot"]
+# The binary is the container's process: no shell in between, so a SIGTERM from
+# `docker stop` reaches the bot and it shuts down gracefully.
+ENTRYPOINT ["/app/baibot"]

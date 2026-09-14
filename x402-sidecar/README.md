@@ -54,6 +54,8 @@ canonicalised to the hex ids on the wire.
 
 ## Quick start (docker)
 
+The whole deployment, bot included, is in [`docs/runbook.md`](../docs/runbook.md) of the repository.
+
 ```sh
 cd x402-sidecar
 cp .env.example .env       # fill the secrets

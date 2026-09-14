@@ -1,3 +1,15 @@
 /target
 /var
+
+# Host-side state of a docker-compose.yml deployment. Mounted at run time, never
+# part of the image; keeping it out of the build context also keeps the cargo
+# cache layer valid across configuration edits.
+/data
+/config.yml
+/.env
+/.env.*
+
+# The payment sidecar has its own image (x402-sidecar/Dockerfile).
 /x402-sidecar
+
+/.git

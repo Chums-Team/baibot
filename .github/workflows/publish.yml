@@ -1,3 +1,7 @@
+# Fork note: images go to ghcr.io/<owner>/baibot of this repository (Chums-Team),
+# tagged `chums` from the chums branch and by version from `v*` tags. Upstream
+# publishes `latest` from main on a self-hosted amd64 runner; this fork uses the
+# GitHub-hosted runners for both architectures.
 name: Publish
 on:
   workflow_run:
@@ -14,7 +18,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       (
-        github.event.workflow_run.head_branch == 'main' ||
+        github.event.workflow_run.head_branch == 'chums' ||
         startsWith(github.event.workflow_run.head_branch || '', 'v')
       )
     runs-on: ubuntu-latest
@@ -33,7 +37,7 @@ jobs:
           images: |
             ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=latest,enable=${{ github.event.workflow_run.head_branch == 'main' }}
+            type=raw,value=chums,enable=${{ github.event.workflow_run.head_branch == 'chums' }}
             type=semver,pattern={{raw}},value=${{ github.event.workflow_run.head_branch }},enable=${{ startsWith(github.event.workflow_run.head_branch || '', 'v') }}
 
   docker-build:
@@ -41,7 +45,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       (
-        github.event.workflow_run.head_branch == 'main' ||
+        github.event.workflow_run.head_branch == 'chums' ||
         startsWith(github.event.workflow_run.head_branch || '', 'v')
       )
     permissions:
@@ -52,7 +56,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: self-hosted
+          - os: ubuntu-latest
             arch: amd64
           - os: ubuntu-24.04-arm
             arch: arm64
@@ -76,7 +80,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           tags: |
-            type=raw,value=latest,enable=${{ github.event.workflow_run.head_branch == 'main' }}
+            type=raw,value=chums,enable=${{ github.event.workflow_run.head_branch == 'chums' }}
             type=semver,pattern={{raw}},value=${{ github.event.workflow_run.head_branch }},enable=${{ startsWith(github.event.workflow_run.head_branch || '', 'v') }}
           flavor: |
             latest=auto
@@ -96,7 +100,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       (
-        github.event.workflow_run.head_branch == 'main' ||
+        github.event.workflow_run.head_branch == 'chums' ||
         startsWith(github.event.workflow_run.head_branch || '', 'v')
       )
     permissions:

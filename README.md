@@ -37,6 +37,25 @@ It's influenced by [chaz](https://github.com/arcuru/chaz), but does **not** use 
 - 👥 **Actively maintained** by the team at [etke.cc](https://etke.cc/)
 
 
+## 🧩 Chums additions
+
+This is the `chums` branch of [Chums-Team/baibot](https://github.com/Chums-Team/baibot), the fork that runs the assistant of the [Chums](https://chums.chat) messenger. On top of upstream baibot it adds the following. All of it is optional: without the corresponding configuration the bot behaves like upstream.
+
+- 💰 **[Billing](./docs/configuration/billing.md)**: an append-only SQLite ledger of the money spent per room. Each LLM call reserves, charges (the provider's real cost with a markup; for OpenRouter the cost it reports) and releases; spending caps per day and month; `balance`, `stats` and `billing` chat commands.
+
+- 💸 **[x402 top-ups](./docs/configuration/x402.md)**: users pay USDT (TRC-20) on TRON into a room's balance, through the [payment sidecar](./x402-sidecar/README.md) in this repository and an x402 facilitator; `topup` chat command.
+
+- 📡 **[Matrix events for the Chums client](./docs/matrix-events.md)**: `cc.chums.x402_request`, `cc.chums.cap_hit`, `cc.chums.x402_topup_confirmed` from the bot, `cc.chums.set_user_locale` from the client.
+
+- 🌍 **[Localization](./docs/configuration/i18n.md)** of the replies to users in 8 languages, per user, and an optional introduction per language after joining a room.
+
+- 🚧 **[Administrator-only commands](./docs/access.md#-administrator-only-commands)**, for deployments where users only talk to the bot.
+
+- 📓 **[Runbook](./docs/runbook.md)** and a [`docker-compose.yml`](./docker-compose.yml) for running the bot next to the sidecar.
+
+The changes are listed at the top of the [changelog](CHANGELOG.md).
+
+
 ## 🖼️ Screenshots
 
 ![Introduction and general usage](./docs/screenshots/introduction-and-general-usage.webp)

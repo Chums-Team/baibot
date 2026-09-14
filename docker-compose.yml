@@ -1,0 +1,66 @@
+# The bot next to the x402 payment sidecar (x402-sidecar/docker-compose.yml).
+#
+# The two compose projects meet on the external Docker network `himari-shared`:
+# the bot reaches the sidecar at http://x402-sidecar:8402 and the sidecar posts
+# settlement notifications to http://bot:9000/internal/x402-settled. The `x402`
+# section of config.yml must therefore bind on all interfaces of the container:
+#
+#   x402:
+#     sidecar_url: http://x402-sidecar:8402
+#     internal_bind: 0.0.0.0
+#     allow_non_loopback_bind: true
+#
+# Before the first `docker compose up`:
+#
+#   docker network create himari-shared
+#   cp .env.example .env                  # secrets and per-host settings
+#   cp etc/app/config.yml.dist config.yml # and edit it
+#   mkdir data
+#
+# then `docker compose pull` (the published image) or `docker compose up -d
+# --build` (a local build). The whole procedure is in docs/runbook.md.
+#
+# Without the sidecar, drop the `networks` keys and the `x402` section; the rest
+# works as for upstream baibot (docs/installation.md).
+
+services:
+  bot:
+    # The image CI publishes from the chums branch (.github/workflows/publish.yml):
+    # `docker compose pull` fetches it, `docker compose up -d --build` builds the
+    # same image locally under the same name instead.
+    image: ghcr.io/chums-team/baibot:chums
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: himari-bot
+    restart: unless-stopped
+    # Must own ./data. Set UID and GID in .env.
+    user: "${UID:-1000}:${GID:-1000}"
+    env_file:
+      - .env
+    environment:
+      # Paths inside the container. Everything deployment-specific is in .env
+      # and config.yml.
+      BAIBOT_CONFIG_FILE_PATH: /app/config.yml
+      BAIBOT_PERSISTENCE_DATA_DIR_PATH: /data
+    volumes:
+      - ./config.yml:/app/config.yml:ro
+      # Matrix session and crypto store, dynamic configuration, billing.db.
+      - ./data:/data
+    # The sidecar reaches the settlement endpoint over the shared network, not
+    # through the host. Publish it on the host's loopback only if you want to
+    # curl it from there:
+    #
+    # ports:
+    #   - "127.0.0.1:9000:9000"
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=1024m
+    networks:
+      - himari-shared
+
+networks:
+  himari-shared:
+    external: true

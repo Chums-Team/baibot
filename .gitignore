@@ -1,2 +1,7 @@
 /target
 /var
+
+# Host-side state of a docker-compose.yml deployment.
+/data
+/config.yml
+/.env
