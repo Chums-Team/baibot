@@ -5,10 +5,6 @@
 //! thread via `tokio::task::spawn_blocking`, and access to the connection
 //! is serialized by a `Mutex` (SQLite is single-writer anyway).
 
-// Nothing in the crate consumes the ledger yet; the chat-completion controller is wired to it
-// in a follow-up commit, at which point this allow goes away.
-#![allow(dead_code, unused_imports)]
-
 pub mod ledger;
 pub mod pricing;
 pub mod types;
@@ -24,3 +20,14 @@ pub use wrapper::{
     BillingWrapperConfig, ChargeBreakdown, PreCheckOutcome, compute_charge, new_correlation_id,
     pre_check,
 };
+
+/// The billing feature as wired into a running bot: the ledger plus the policy applied to
+/// every LLM call. Built once at startup from the `billing` configuration section and absent
+/// when that section is absent.
+#[derive(Clone)]
+pub struct BillingContext {
+    pub service: BillingService,
+    pub wrapper_config: BillingWrapperConfig,
+    /// Fallback prices for calls whose cost the provider does not report.
+    pub pricing: PricingTable,
+}

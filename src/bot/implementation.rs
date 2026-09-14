@@ -22,6 +22,7 @@ use mxlink::helpers::encryption::Manager as EncryptionManager;
 use mxlink::mime::Mime;
 
 use crate::agent::Manager as AgentManager;
+use crate::billing::{BillingContext, BillingService};
 use crate::entity::catch_up_marker::{
     CatchUpMarker, CatchUpMarkerManager, DelayedCatchUpMarkerManager,
 };
@@ -62,6 +63,9 @@ struct BotInner {
     room_display_name_fetcher: Arc<RoomDisplayNameFetcher>,
     agent_manager: Manager,
     admin_pattern_regexes: Vec<regex::Regex>,
+
+    /// Present only when the `billing` configuration section is set.
+    billing: Option<BillingContext>,
 }
 
 /// Bot represents a bot instance.
@@ -115,6 +119,8 @@ impl Bot {
             Some(ROOM_DISPLAY_NAME_FETCHER_LRU_CACHE_SIZE),
         );
 
+        let billing = open_billing(&config)?;
+
         Ok(Self {
             inner: Arc::new(BotInner {
                 config,
@@ -127,8 +133,14 @@ impl Bot {
                 room_display_name_fetcher: Arc::new(room_display_name_fetcher),
                 agent_manager,
                 admin_pattern_regexes,
+                billing,
             }),
         })
+    }
+
+    /// The billing feature, when configured.
+    pub(crate) fn billing(&self) -> Option<&BillingContext> {
+        self.inner.billing.as_ref()
     }
 
     pub(crate) fn admin_patterns(&self) -> &Vec<String> {
@@ -503,4 +515,40 @@ pub fn create_catch_up_marker_manager(matrix_link: MatrixLink) -> CatchUpMarkerM
 
 async fn create_initial_catch_up_marker() -> CatchUpMarker {
     CatchUpMarker::new(0)
+}
+
+/// Opens the billing ledger when the `billing` configuration section is present.
+/// The parent directory of the ledger file is created if missing, so a fresh deployment
+/// works without preflight.
+fn open_billing(config: &Config) -> anyhow::Result<Option<BillingContext>> {
+    let Some(billing) = &config.billing else {
+        return Ok(None);
+    };
+
+    let path = billing.db_path(&config.persistence)?;
+
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed creating billing data directory ({}): {}",
+                parent.display(),
+                e
+            )
+        })?;
+    }
+
+    let service = BillingService::open(&path).map_err(|e| {
+        anyhow::anyhow!("Failed opening billing ledger at {}: {}", path.display(), e)
+    })?;
+
+    tracing::info!(path = %path.display(), "Billing enabled");
+
+    Ok(Some(BillingContext {
+        service,
+        wrapper_config: billing.wrapper_config(),
+        pricing: billing.pricing_table(),
+    }))
 }

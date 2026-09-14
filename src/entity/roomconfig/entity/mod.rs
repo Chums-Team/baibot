@@ -21,6 +21,16 @@ pub use text_generation::{
 };
 pub use text_to_speech::{TextToSpeechBotMessagesFlowType, TextToSpeechUserMessagesFlowType};
 
+/// Per-room billing settings. Every field is optional: `None` means "use the global value
+/// from the `billing` section of the static configuration".
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct RoomSettingsBilling {
+    /// Multiplier on the provider's cost for calls made from this room, overriding
+    /// `billing.markup_pct`. Ignored when not a positive finite number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markup_override_pct: Option<f64>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, EventContent)]
 #[ruma_event(type = "cc.etke.baibot.room_config", kind = RoomAccountData)]
 pub struct RoomConfigCarrierContent {
@@ -99,4 +109,9 @@ pub struct RoomSettings {
 
     #[serde(default)]
     pub text_to_speech: text_to_speech::RoomSettingsTextToSpeech,
+
+    /// `#[serde(default)]` keeps room configurations persisted before this section existed
+    /// readable.
+    #[serde(default)]
+    pub billing: RoomSettingsBilling,
 }

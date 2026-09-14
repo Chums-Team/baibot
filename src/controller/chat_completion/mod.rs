@@ -4,6 +4,8 @@ use mxlink::{MatrixLink, MessageResponseType};
 
 use tracing::Instrument;
 
+pub(crate) mod billing_glue;
+
 use crate::agent::AgentInstance;
 use crate::agent::AgentPurpose;
 use crate::agent::ControllerTrait;
@@ -516,11 +518,13 @@ async fn handle_stage_text_generation(
 
     let controller = agent.controller();
 
+    let model_id = controller
+        .text_generation_model_id()
+        .unwrap_or("unknown-model".to_owned());
+
     let prompt_variables = TextGenerationPromptVariables::new(
         bot.name(),
-        &controller
-            .text_generation_model_id()
-            .unwrap_or("unknown-model".to_owned()),
+        &model_id,
         chrono::Utc::now(),
         conversation.start_time(),
     );
@@ -551,75 +555,100 @@ async fn handle_stage_text_generation(
         prompt_variables,
     };
 
-    // When the thinking-notice is enabled, race generation against a timer that posts and then
-    // periodically edits a "thinking…" placeholder. `biased;` makes generation win a tie, and the
-    // loop exits the instant generation resolves, so there is no detached task and no late edit can
-    // ever clobber the real answer. `placeholder` is the event we must finalize in every exit path.
-    let (result, placeholder) = if let Some(notice_prompt_variables) = notice_prompt_variables {
-        let generation = controller
-            .generate_text(conversation, params)
-            .instrument(span);
-        tokio::pin!(generation);
+    // Billing chain: `pre_check + reserve` → LLM → `charge + release`, all inside
+    // `billing_glue::run_billed_call` so the order is integration-tested there. Without a
+    // `billing` configuration section, only the LLM closure runs. The room-facing side effects
+    // (announcements, error markdown) stay here so the glue is matrix-sdk-free.
+    //
+    // The thinking-notice race (upstream 1.24) lives inside the LLM closure, so the placeholder
+    // is only ever posted while an actual generation is in flight. `placeholder` is shared with
+    // the outer scope through a `Mutex` because the closure is `FnOnce` but the outcome branches
+    // below must finalize it in every exit path.
+    let placeholder: std::sync::Mutex<Option<OwnedEventId>> = std::sync::Mutex::new(None);
 
-        let mut placeholder: Option<OwnedEventId> = None;
-        // Seed the flavor sequence per-generation so different turns don't all open on the same
-        // line; the monotonic increment then guarantees consecutive notices differ.
-        let mut notice_sequence: usize = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|since| since.subsec_nanos() as usize)
-            .unwrap_or(0);
-        let mut tick = tokio::time::interval_at(
-            tokio::time::Instant::now() + THINKING_NOTICE_FIRST_DELAY,
-            THINKING_NOTICE_INTERVAL,
-        );
-        // If an edit runs long, hold ~INTERVAL spacing rather than bursting the missed ticks.
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let outcome = billing_glue::run_billed_call(
+        bot.billing(),
+        message_context.room_id().as_str(),
+        message_context.sender_id().as_str(),
+        message_context.event_id().as_str(),
+        message_context
+            .room_config_context()
+            .billing_markup_override_pct(),
+        &model_id,
+        || async {
+            // When the thinking-notice is enabled, race generation against a timer that posts and
+            // then periodically edits a "thinking…" placeholder. `biased;` makes generation win a
+            // tie, and the loop exits the instant generation resolves, so there is no detached
+            // task and no late edit can ever clobber the real answer.
+            let Some(notice_prompt_variables) = notice_prompt_variables else {
+                return controller
+                    .generate_text(conversation, params)
+                    .instrument(span)
+                    .await;
+            };
 
-        let result = loop {
-            tokio::select! {
-                biased;
-                generation_result = &mut generation => break generation_result,
-                _ = tick.tick() => {
-                    let message = notice_prompt_variables.format(
-                        strings::thinking::pick_message(start_time.elapsed(), notice_sequence),
-                    );
-                    notice_sequence = notice_sequence.wrapping_add(1);
+            let generation = controller
+                .generate_text(conversation, params)
+                .instrument(span);
+            tokio::pin!(generation);
 
-                    match &placeholder {
-                        None => {
-                            placeholder = bot
-                                .messaging()
-                                .send_text_markdown_no_fail_quietly(
-                                    message_context.room(),
-                                    message,
-                                    response_type.clone(),
-                                )
-                                .await
-                                .map(|response| response.event_id);
-                        }
-                        Some(event_id) => {
-                            bot.messaging()
-                                .edit_text_markdown_no_fail(
-                                    message_context.room(),
-                                    event_id,
-                                    message,
-                                )
-                                .await;
+            // Seed the flavor sequence per-generation so different turns don't all open on the
+            // same line; the monotonic increment then guarantees consecutive notices differ.
+            let mut notice_sequence: usize = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|since| since.subsec_nanos() as usize)
+                .unwrap_or(0);
+            let mut tick = tokio::time::interval_at(
+                tokio::time::Instant::now() + THINKING_NOTICE_FIRST_DELAY,
+                THINKING_NOTICE_INTERVAL,
+            );
+            // If an edit runs long, hold ~INTERVAL spacing rather than bursting the missed ticks.
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+            loop {
+                tokio::select! {
+                    biased;
+                    generation_result = &mut generation => break generation_result,
+                    _ = tick.tick() => {
+                        let message = notice_prompt_variables.format(
+                            strings::thinking::pick_message(start_time.elapsed(), notice_sequence),
+                        );
+                        notice_sequence = notice_sequence.wrapping_add(1);
+
+                        let current = placeholder.lock().expect("placeholder mutex poisoned").clone();
+                        match current {
+                            None => {
+                                let sent = bot
+                                    .messaging()
+                                    .send_text_markdown_no_fail_quietly(
+                                        message_context.room(),
+                                        message,
+                                        response_type.clone(),
+                                    )
+                                    .await
+                                    .map(|response| response.event_id);
+                                *placeholder.lock().expect("placeholder mutex poisoned") = sent;
+                            }
+                            Some(event_id) => {
+                                bot.messaging()
+                                    .edit_text_markdown_no_fail(
+                                        message_context.room(),
+                                        &event_id,
+                                        message,
+                                    )
+                                    .await;
+                            }
                         }
                     }
                 }
             }
-        };
+        },
+    )
+    .await;
 
-        (result, placeholder)
-    } else {
-        let result = controller
-            .generate_text(conversation, params)
-            .instrument(span)
-            .await;
-
-        (result, None)
-    };
+    let placeholder = placeholder
+        .into_inner()
+        .expect("placeholder mutex poisoned");
 
     let duration = std::time::Instant::now().duration_since(start_time);
 
@@ -627,14 +656,108 @@ async fn handle_stage_text_generation(
         agent_id = agent.identifier().as_string(),
         provider = format!("{}", agent.definition().provider.clone()),
         ?duration,
-        usage = ?result.as_ref().ok().and_then(|result| result.usage.as_ref()),
         "Done with LLM text generation"
     );
 
-    let result = match result {
-        Ok(result) => result,
-        Err(err) => {
+    let result = match outcome {
+        billing_glue::BilledCallOutcome::Unbilled { text_generation } => {
+            tracing::debug!(usage = ?text_generation.usage, "Text generation usage");
+            text_generation
+        }
+        billing_glue::BilledCallOutcome::Success {
+            text_generation,
+            correlation_id,
+            summary,
+        } => {
+            // The ids let a single call's reserve/charge/release trio be found in the ledger.
+            tracing::info!(
+                %correlation_id,
+                charged_usd = summary.charged_usd,
+                actual_cost_usd = summary.actual_cost_usd,
+                used_fallback_pricing = summary.used_fallback_pricing,
+                charge_event_id = %summary.charge_event_id,
+                release_event_id = %summary.release_event_id,
+                "Billing: charge and release written",
+            );
+            text_generation
+        }
+        billing_glue::BilledCallOutcome::SettleFailed {
+            text_generation,
+            correlation_id,
+            error,
+        } => {
+            // Charge bookkeeping failed but the LLM already produced text, so the user sees the
+            // answer regardless. Log loudly so ops can reconcile manually; do NOT fail the reply.
+            tracing::error!(
+                %correlation_id,
+                error = %error,
+                "Billing: settling the charge failed; the reply still goes out, manual reconciliation needed",
+            );
+            text_generation
+        }
+        billing_glue::BilledCallOutcome::InsufficientBalance {
+            current_balance_usd,
+            reserve_amount_usd,
+        } => {
+            bot.messaging()
+                .send_text_markdown_no_fail(
+                    message_context.room(),
+                    strings::billing::insufficient_balance(current_balance_usd, reserve_amount_usd),
+                    response_type,
+                )
+                .await;
+
+            return None;
+        }
+        billing_glue::BilledCallOutcome::CapHit {
+            period,
+            spent_usd,
+            cap_usd,
+        } => {
+            tracing::info!(
+                period = period.as_str(),
+                spent_usd,
+                cap_usd,
+                "Billing: spending cap reached; declining LLM call",
+            );
+
+            let resumes_at = match period {
+                billing_glue::CapPeriod::Daily => next_utc_day_boundary(),
+                billing_glue::CapPeriod::Monthly => next_utc_month_boundary(),
+            };
+
+            bot.messaging()
+                .send_text_markdown_no_fail(
+                    message_context.room(),
+                    strings::billing::cap_hit(period.as_str(), cap_usd, &resumes_at.to_rfc3339()),
+                    response_type,
+                )
+                .await;
+
+            return None;
+        }
+        billing_glue::BilledCallOutcome::PreCheckError(error) => {
+            tracing::error!(error, "Billing: pre-check failed; declining LLM call");
+
+            bot.messaging()
+                .send_error_markdown_no_fail(
+                    message_context.room(),
+                    strings::billing::temporarily_unavailable(),
+                    response_type,
+                )
+                .await;
+
+            return None;
+        }
+        billing_glue::BilledCallOutcome::LlmError {
+            correlation_id,
+            error: err,
+        } => {
+            // With billing enabled, the reserve stays in the ledger as a zombie for the billing
+            // administration commands to surface. It is NOT released automatically: a
+            // half-completed provider call may have cost real money.
             tracing::warn!(
+                correlation_id = ?correlation_id,
                 "Error in room {} while trying to generate text via agent {}: {:?}",
                 message_context.room_id(),
                 agent.identifier(),
@@ -936,6 +1059,27 @@ fn inject_sender_context(
         .collect();
 
     Conversation { messages }
+}
+
+fn next_utc_day_boundary() -> chrono::DateTime<chrono::Utc> {
+    use chrono::{NaiveTime, TimeZone};
+
+    let now = chrono::Utc::now();
+    let tomorrow = now.date_naive() + chrono::Duration::days(1);
+    chrono::Utc.from_utc_datetime(&tomorrow.and_time(NaiveTime::MIN))
+}
+
+fn next_utc_month_boundary() -> chrono::DateTime<chrono::Utc> {
+    use chrono::{Datelike, NaiveDate, NaiveTime, TimeZone};
+
+    let now = chrono::Utc::now();
+    let (year, month) = if now.month() == 12 {
+        (now.year() + 1, 1)
+    } else {
+        (now.year(), now.month() + 1)
+    };
+    let next = NaiveDate::from_ymd_opt(year, month, 1).expect("valid month boundary");
+    chrono::Utc.from_utc_datetime(&next.and_time(NaiveTime::MIN))
 }
 
 #[cfg(test)]

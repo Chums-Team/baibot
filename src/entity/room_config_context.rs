@@ -230,6 +230,11 @@ impl RoomConfigContext {
             })
     }
 
+    /// Per-room billing markup override. `None` means the global `billing.markup_pct` applies.
+    pub fn billing_markup_override_pct(&self) -> Option<f64> {
+        self.room_config.settings.billing.markup_override_pct
+    }
+
     pub fn is_user_allowed_room_local_agent_manager(
         &self,
         user_id: OwnedUserId,

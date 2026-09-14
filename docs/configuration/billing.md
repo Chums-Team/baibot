@@ -44,4 +44,18 @@ billing:
 Every key can be overridden with an environment variable, following the usual naming rule (`billing.daily_cap_usd` → `BAIBOT_BILLING_DAILY_CAP_USD`). `BAIBOT_BILLING_ADMIN_MXIDS` takes a space-separated list. Setting any `BAIBOT_BILLING_*` variable enables billing even when the configuration file has no `billing` section.
 
 > [!WARNING]
-> If the model used for text generation is neither priced by the provider nor present in the pricing table, its calls cannot be charged: the reserve stays in the ledger as a "zombie" for manual review and the reply is still delivered. Make sure every paid model you use has a pricing entry.
+> If the model used for text generation is neither priced by the provider nor present in the pricing table, its calls are charged `$0` and the charge row is flagged with `unknown_model_audit: true` in its metadata, so the room is not blocked but the bot effectively pays for the call. Make sure every paid model you use has a pricing entry.
+
+
+### Per-room markup
+
+A room may override `markup_pct` through the `billing.markup_override_pct` key of its [room configuration](./README.md#dynamic-configuration). Values that are not positive finite numbers are ignored. There is no chat command for this setting yet.
+
+
+### What happens around a call
+
+- **Balance below `reserve_amount_usd`**: the bot replies with the current balance and the amount needed, and does not call the LLM.
+- **A cap is reached**: the bot replies that the service is paused and when it resumes (the start of the next UTC day or month), and does not call the LLM.
+- **The ledger is unavailable** (e.g. the database cannot be read): the bot replies that billing is temporarily unavailable, and does not call the LLM.
+- **The provider call fails**: the reserve stays in the ledger as a "zombie" for manual review, because a half-completed call may still have cost money. Zombies are surfaced by the billing administration commands.
+- **The call succeeds but the ledger write fails**: the reply is still delivered and the failure is logged for manual reconciliation.
