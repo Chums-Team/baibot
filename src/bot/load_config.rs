@@ -174,7 +174,13 @@ pub fn load() -> anyhow::Result<Config> {
                     anyhow!("The {key} environment variable must be true or false: {e}")
                 })?;
             }
-            _ => {}
+            _ => {
+                if let Some(locale) =
+                    key.strip_prefix(cfg_env::BAIBOT_ROOM_POST_JOIN_SELF_INTRODUCTION_TEXT_PREFIX)
+                {
+                    set_post_join_self_introduction_text(&mut config, locale, value);
+                }
+            }
         }
     }
 
@@ -185,6 +191,22 @@ pub fn load() -> anyhow::Result<Config> {
 
 fn optional_non_empty(value: String) -> Option<String> {
     if value.is_empty() { None } else { Some(value) }
+}
+
+/// `BAIBOT_ROOM_POST_JOIN_SELF_INTRODUCTION_TEXT_<LOCALE>`: the locale comes from the variable
+/// name (`EN` → `en`); an empty value removes the text the configuration file has for it.
+fn set_post_join_self_introduction_text(config: &mut Config, locale: &str, value: String) {
+    let locale = locale.to_ascii_lowercase();
+    let texts = &mut config.room.post_join_self_introduction_text;
+
+    match optional_non_empty(value) {
+        Some(text) => {
+            texts.insert(locale, text);
+        }
+        None => {
+            texts.remove(&locale);
+        }
+    }
 }
 
 /// Setting any `BAIBOT_BILLING_*` variable enables billing even when the configuration

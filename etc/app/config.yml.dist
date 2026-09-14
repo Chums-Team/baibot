@@ -51,6 +51,13 @@ room:
   # Whether the bot should send an introduction message after joining a room.
   post_join_self_introduction_enabled: true
 
+  # Optional. A fixed introduction (Markdown) per locale that replaces the built-in one
+  # (bot name, agents, commands). Sent in the language of the user who invited the bot;
+  # a text for `i18n.fallback_locale` is required. See docs/configuration/i18n.md.
+  # post_join_self_introduction_text:
+  #   en: "Hi! I am an assistant bot. Ask me anything."
+  #   ru: "Привет! Я бот-ассистент. Спрашивай о чём угодно."
+
 i18n:
   # Language of the replies to users whose client has not declared one with a
   # `cc.chums.set_user_locale` event. One of the locales under locales/.

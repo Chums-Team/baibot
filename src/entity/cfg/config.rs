@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use mxlink::helpers::encryption::EncryptionKey;
@@ -54,8 +55,8 @@ impl Config {
         self.homeserver.validate()?;
         self.user.validate(&self.homeserver.server_name)?;
         self.persistence.validate()?;
-        self.room.validate()?;
         self.i18n.validate()?;
+        self.room.validate(&self.i18n.fallback_locale)?;
         self.access.validate()?;
 
         if self.command_prefix.is_empty() {
@@ -388,10 +389,51 @@ impl PersistenceConfig {
 pub struct ConfigRoom {
     #[serde(default = "super::defaults::room_post_join_self_introduction_enabled")]
     pub post_join_self_introduction_enabled: bool,
+
+    /// Optional. A fixed introduction per locale (`en`, `ru`, …) that replaces the built-in
+    /// introduction (bot name, agents, commands) after joining a room. The bot sends it in the
+    /// locale of the user who invited it, falling back to `i18n.fallback_locale`, whose entry is
+    /// therefore required. Empty: the built-in introduction is sent.
+    /// See `docs/configuration/i18n.md`.
+    #[serde(default)]
+    pub post_join_self_introduction_text: BTreeMap<String, String>,
 }
 
 impl ConfigRoom {
-    pub fn validate(&self) -> anyhow::Result<()> {
+    pub fn validate(&self, fallback_locale: &str) -> anyhow::Result<()> {
+        if self.post_join_self_introduction_text.is_empty() {
+            return Ok(());
+        }
+
+        let available = crate::i18n::available_locales();
+
+        for (locale, text) in &self.post_join_self_introduction_text {
+            if !available.iter().any(|a| a == locale) {
+                return Err(anyhow::anyhow!(
+                    "The room.post_join_self_introduction_text configuration must be keyed by the locales the bot has translations for ({}), got `{}`",
+                    available.join(", "),
+                    locale,
+                ));
+            }
+
+            if text.trim().is_empty() {
+                return Err(anyhow::anyhow!(
+                    "The room.post_join_self_introduction_text configuration must not have an empty text (locale `{}`)",
+                    locale,
+                ));
+            }
+        }
+
+        if !self
+            .post_join_self_introduction_text
+            .contains_key(fallback_locale)
+        {
+            return Err(anyhow::anyhow!(
+                "The room.post_join_self_introduction_text configuration must have a text for the i18n.fallback_locale (`{}`), the one sent to users without a declared locale",
+                fallback_locale,
+            ));
+        }
+
         Ok(())
     }
 }
@@ -401,6 +443,7 @@ impl Default for ConfigRoom {
         Self {
             post_join_self_introduction_enabled:
                 super::defaults::room_post_join_self_introduction_enabled(),
+            post_join_self_introduction_text: BTreeMap::new(),
         }
     }
 }

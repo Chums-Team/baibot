@@ -115,3 +115,81 @@ fn auth_config_treats_empty_strings_as_unset() {
 
     assert!(err.to_string().contains("Set one authentication method"));
 }
+
+mod room {
+    use std::collections::BTreeMap;
+
+    use crate::entity::cfg::config::ConfigRoom;
+
+    fn room(texts: &[(&str, &str)]) -> ConfigRoom {
+        ConfigRoom {
+            post_join_self_introduction_text: texts
+                .iter()
+                .map(|(locale, text)| ((*locale).to_owned(), (*text).to_owned()))
+                .collect(),
+            ..ConfigRoom::default()
+        }
+    }
+
+    #[test]
+    fn default_has_no_introduction_text() {
+        let cfg = ConfigRoom::default();
+        assert!(cfg.post_join_self_introduction_enabled);
+        assert_eq!(cfg.post_join_self_introduction_text, BTreeMap::new());
+        cfg.validate("en").unwrap();
+    }
+
+    #[test]
+    fn parses_the_text_map() {
+        let cfg: ConfigRoom = serde_yaml_ng::from_str(
+            "post_join_self_introduction_text:\n  en: \"Hi!\"\n  ru: \"Привет!\"\n",
+        )
+        .unwrap();
+        assert_eq!(cfg.post_join_self_introduction_text["ru"], "Привет!");
+        cfg.validate("en").unwrap();
+    }
+
+    #[test]
+    fn requires_a_text_for_the_fallback_locale() {
+        let err = room(&[("ru", "Привет!")])
+            .validate("en")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("i18n.fallback_locale"), "{err}");
+        assert!(err.contains("`en`"), "{err}");
+
+        room(&[("ru", "Привет!")]).validate("ru").unwrap();
+    }
+
+    #[test]
+    fn rejects_a_locale_without_translations() {
+        let err = room(&[("en", "Hi!"), ("xx", "?")])
+            .validate("en")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("`xx`"), "{err}");
+        assert!(err.contains("en, "), "{err}");
+
+        // Exact file names, as for i18n.fallback_locale.
+        assert!(
+            room(&[("en", "Hi!"), ("EN", "Hi!")])
+                .validate("en")
+                .is_err()
+        );
+        assert!(
+            room(&[("en", "Hi!"), ("pt-BR", "Olá!")])
+                .validate("en")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn rejects_an_empty_text() {
+        let err = room(&[("en", "Hi!"), ("ru", "  ")])
+            .validate("en")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("empty text"), "{err}");
+        assert!(err.contains("`ru`"), "{err}");
+    }
+}

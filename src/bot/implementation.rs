@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::sync::Arc;
 use std::{future::Future, pin::Pin};
@@ -193,6 +194,12 @@ impl Bot {
 
     pub(crate) fn post_join_self_introduction_enabled(&self) -> bool {
         self.inner.config.room.post_join_self_introduction_enabled
+    }
+
+    /// `room.post_join_self_introduction_text`: `locale → text`, empty when the built-in
+    /// introduction is to be sent.
+    pub(crate) fn post_join_self_introduction_text(&self) -> &BTreeMap<String, String> {
+        &self.inner.config.room.post_join_self_introduction_text
     }
 
     pub(crate) fn homeserver_name(&self) -> &str {
