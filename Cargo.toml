@@ -48,6 +48,10 @@ rusqlite = { version = "0.37", features = ["bundled", "chrono"] }
 thiserror = "1.0"
 uuid = { version = "1.10", features = ["v7", "serde"] }
 
+[dev-dependencies]
+# Mock HTTP server for provider tests (see `openai_compat::openrouter_cost`).
+axum = { version = "0.7", default-features = false, features = ["http1", "json", "tokio"] }
+
 [profile.release]
 strip = true
 opt-level = "z"

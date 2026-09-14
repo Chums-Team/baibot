@@ -7,6 +7,8 @@ With the section present, every LLM text-generation call is accounted for in an 
 1. Before the call, the room balance and the bot-wide spending caps are checked and a small amount (`reserve_amount_usd`) is held.
 2. After the call, the actual cost (as reported by the provider, or estimated from token counts via the pricing table) multiplied by `markup_pct` is charged and the hold is released.
 
+Only [OpenRouter](../providers.md#openrouter) reports the cost of a call: after each text generation, the bot asks OpenRouter for the cost of that completion. For every other provider (and when the lookup fails), the cost is estimated from the token counts via the pricing table.
+
 Rooms are funded by top-ups. How top-ups arrive is a separate concern (see the x402 integration); the ledger only records them.
 
 

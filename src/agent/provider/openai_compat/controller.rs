@@ -30,11 +30,18 @@ use crate::{
 };
 
 use super::Config;
+use super::openrouter_cost;
 
 #[derive(Debug, Clone)]
 pub struct Controller {
     config: Config,
     client: OpenAI,
+    // Base URL with a trailing slash, as used by `client`. Kept for the follow-up
+    // OpenRouter cost lookup, which hits a sibling endpoint of the chat completion API.
+    base_url: String,
+    // Client for the OpenRouter cost lookup (see `openrouter_cost`).
+    // `None` unless the base URL points at OpenRouter.
+    cost_lookup_client: Option<reqwest::Client>,
 }
 
 impl Controller {
@@ -52,7 +59,49 @@ impl Controller {
 
         let client = OpenAI::new(auth, &base_url);
 
-        Self { config, client }
+        // The cost lookup runs on the hot path of every text generation, so keep its timeouts
+        // short: if OpenRouter is slow, falling back to the pricing table beats delaying the
+        // reply. `build` only fails on TLS/system init; fall back to the infallible
+        // `Client::new()` so this constructor stays infallible.
+        let cost_lookup_client = openrouter_cost::is_openrouter_base_url(&base_url).then(|| {
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(3))
+                .connect_timeout(std::time::Duration::from_secs(2))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new())
+        });
+
+        Self {
+            config,
+            client,
+            base_url,
+            cost_lookup_client,
+        }
+    }
+
+    /// Asks OpenRouter for the authoritative cost of a completion.
+    ///
+    /// Best-effort: returns `None` for non-OpenRouter providers, when the completion id is
+    /// missing, or when the lookup fails. The billing layer then falls back to the pricing table.
+    async fn lookup_cost_usd(&self, completion_id: Option<&str>) -> Option<f64> {
+        let client = self.cost_lookup_client.as_ref()?;
+        let completion_id = completion_id?;
+
+        let api_key = self.config.api_key.as_deref().unwrap_or_default();
+
+        match openrouter_cost::fetch_total_cost_usd(client, &self.base_url, api_key, completion_id)
+            .await
+        {
+            Ok(cost) => Some(cost),
+            Err(err) => {
+                tracing::debug!(
+                    ?err,
+                    completion_id,
+                    "OpenRouter cost lookup failed; billing will use the pricing table"
+                );
+                None
+            }
+        }
     }
 }
 
@@ -190,9 +239,10 @@ impl ControllerTrait for Controller {
         );
 
         // Token counts are part of the standard OpenAI `usage` object, which the library
-        // already deserializes. The cost is not reported by the chat completion API.
+        // already deserializes. The cost is not reported by the chat completion API;
+        // OpenRouter exposes it through a follow-up request.
         let usage = TextGenerationUsage {
-            cost_usd: None,
+            cost_usd: self.lookup_cost_usd(response.id.as_deref()).await,
             prompt_tokens: response.usage.prompt_tokens,
             completion_tokens: response.usage.completion_tokens,
         };

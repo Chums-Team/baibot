@@ -14,6 +14,7 @@
 
 mod config;
 mod controller;
+mod openrouter_cost;
 mod utils;
 
 pub use config::Config;
