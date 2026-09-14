@@ -4,6 +4,7 @@
 //! a `BillingControllerType`. Routing (where `<prefix>` is the bot's command prefix):
 //!
 //! - `<prefix> balance`                                       → Balance
+//! - `<prefix> topup` / `<prefix> topup <amount_usd>`         → Topup
 //! - `<prefix> stats day` / `... month`                       → StatsDay / StatsMonth (administrators)
 //! - `<prefix> billing` / `<prefix> billing help`             → Help
 //! - `<prefix> billing zombies [<minutes>]`                   → Zombies (administrators)
@@ -19,7 +20,7 @@ use uuid::Uuid;
 use super::controller_type::{BillingCommandAccess, BillingControllerType};
 
 /// Heads of the billing command family, as they follow the command prefix.
-pub const COMMAND_HEADS: &[&str] = &["balance", "stats", "billing"];
+pub const COMMAND_HEADS: &[&str] = &["balance", "topup", "stats", "billing"];
 
 const DEFAULT_ZOMBIE_AGE_MINUTES: u32 = 10;
 
@@ -43,6 +44,25 @@ pub fn determine_controller(
                 command: "balance".into(),
                 reason: "the command takes no arguments".into(),
             }
+        });
+    }
+
+    if let Some(rest) = remaining.strip_prefix("topup") {
+        // The range check against `billing.min_topup_usd`/`max_topup_usd` happens at dispatch
+        // time, where the configuration is at hand. Here only the syntax is checked.
+        let rest = rest.trim();
+        if rest.is_empty() {
+            return Some(BillingControllerType::Topup { amount_usd: None });
+        }
+
+        return Some(match rest.parse::<f64>() {
+            Ok(amount) if amount.is_finite() => BillingControllerType::Topup {
+                amount_usd: Some(amount),
+            },
+            _ => BillingControllerType::ParseError {
+                command: "topup".into(),
+                reason: format!("expected an amount in USD (e.g. `topup 0.50`), got `{rest}`"),
+            },
         });
     }
 
@@ -288,6 +308,38 @@ mod tests {
     #[test]
     fn balance_with_arguments_parse_error() {
         assert_parse_error(determine_controller("balance now", USER), "balance");
+    }
+
+    #[test]
+    fn topup_public_default_amount() {
+        assert_eq!(
+            determine_controller("topup", USER),
+            Some(BillingControllerType::Topup { amount_usd: None })
+        );
+        assert_eq!(
+            determine_controller("  topup  ", ADMIN),
+            Some(BillingControllerType::Topup { amount_usd: None })
+        );
+    }
+
+    #[test]
+    fn topup_public_with_amount() {
+        // Any finite number is accepted here; the configured bounds are applied at dispatch.
+        for (text, expected) in [("topup 0.50", 0.50), ("topup 0", 0.0), ("topup -1", -1.0)] {
+            match determine_controller(text, USER) {
+                Some(BillingControllerType::Topup {
+                    amount_usd: Some(amount),
+                }) => assert!((amount - expected).abs() < 1e-12, "{text}"),
+                other => panic!("{text}: expected Topup, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn topup_non_numeric_amount_parse_error() {
+        assert_parse_error(determine_controller("topup abc", USER), "topup");
+        assert_parse_error(determine_controller("topup NaN", USER), "topup");
+        assert_parse_error(determine_controller("topup 1 2", USER), "topup");
     }
 
     #[test]

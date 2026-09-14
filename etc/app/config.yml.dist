@@ -198,6 +198,21 @@ initial_global_config:
 #       input_usd_per_million_tokens: 1.25
 #       output_usd_per_million_tokens: 2.5
 
+# Optional top-ups of the billing ledger through the x402 payment sidecar (see x402-sidecar/).
+# Requires the billing section. See docs/configuration/x402.md.
+#
+# x402:
+#   # Base URL of the payment sidecar.
+#   sidecar_url: http://127.0.0.1:8402
+#   # Secret shared with the sidecar; it signs settlement notifications with it.
+#   internal_secret: ""
+#   # Where the bot listens for the sidecar's settlement notifications.
+#   # Keep it on loopback unless the sidecar runs elsewhere (then also set the flag below
+#   # and firewall the port to the sidecar).
+#   internal_bind: 127.0.0.1
+#   internal_port: 9000
+#   allow_non_loopback_bind: false
+
 # Controls logging.
 #
 # Sets all tracing targets (external crates) to warn, and our own logs to debug.

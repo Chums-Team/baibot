@@ -94,8 +94,8 @@ async fn manual_refund_inserts_credit() {
 
 #[test]
 fn help_includes_admin_section_only_for_admin() {
-    let user = help(PREFIX, false);
-    let admin = help(PREFIX, true);
+    let user = help(PREFIX, false, false);
+    let admin = help(PREFIX, true, false);
     assert!(user.contains("`!bai balance`"), "{user}");
     assert!(!user.contains("Administration commands"), "{user}");
     assert!(admin.contains("Administration commands"), "{admin}");
@@ -103,4 +103,19 @@ fn help_includes_admin_section_only_for_admin() {
     assert!(admin.contains("billing zombies"), "{admin}");
     assert!(admin.contains("manual-release"), "{admin}");
     assert!(admin.contains("manual-refund"), "{admin}");
+}
+
+#[test]
+fn help_lists_topup_only_when_x402_is_configured() {
+    let without = help(PREFIX, false, false);
+    let with = help(PREFIX, false, true);
+    assert!(!without.contains("topup"), "{without}");
+    assert!(with.contains("`!bai topup [<amount_usd>]`"), "{with}");
+}
+
+#[test]
+fn topup_invoice_text_has_amount() {
+    let out = topup_invoice(0.10);
+    assert!(out.contains("$0.10"), "{out}");
+    assert!(out.contains("widget"), "{out}");
 }

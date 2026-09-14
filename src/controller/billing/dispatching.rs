@@ -7,6 +7,8 @@ use super::controller_type::{BillingCommandAccess, BillingControllerType};
 use super::handlers;
 use crate::billing::{BillingContext, Period};
 use crate::entity::MessageContext;
+use crate::entity::cfg::ConfigBilling;
+use crate::matrix::events::{X402RequestContent, emit_x402_request};
 use crate::{Bot, strings};
 
 pub async fn dispatch_controller(
@@ -14,46 +16,120 @@ pub async fn dispatch_controller(
     message_context: &MessageContext,
     bot: &Bot,
 ) -> anyhow::Result<()> {
-    let Some(billing) = bot.billing() else {
+    let (Some(billing), Some(billing_config)) = (bot.billing(), bot.billing_config()) else {
         anyhow::bail!("A billing command was routed while billing is not configured");
     };
 
     let response_type =
         MessageResponseType::Reply(message_context.thread_info().root_event_id.clone());
 
-    match run(controller_type, message_context, bot, billing).await {
-        Ok(reply) => {
+    match run(
+        controller_type,
+        message_context,
+        bot,
+        billing,
+        billing_config,
+    )
+    .await
+    {
+        Reply::Text(reply) => {
             bot.messaging()
                 .send_text_markdown_no_fail(message_context.room(), reply, response_type)
                 .await;
         }
-        Err(reply) => {
+        Reply::Error(reply) => {
             bot.messaging()
                 .send_error_markdown_no_fail(message_context.room(), &reply, response_type)
                 .await;
+        }
+        Reply::X402Request { text, content } => {
+            // The text goes first so that it precedes the widget in the timeline.
+            bot.messaging()
+                .send_text_markdown_no_fail(message_context.room(), text, response_type)
+                .await;
+
+            if let Err(e) = emit_x402_request(message_context.room(), &content).await {
+                tracing::warn!(error = %e, "emit_x402_request failed for the topup command");
+            }
         }
     }
 
     Ok(())
 }
 
-/// `Ok` is a regular reply, `Err` is a reply to be sent as an error notice.
+enum Reply {
+    /// A regular reply.
+    Text(String),
+    /// A reply sent as an error notice.
+    Error(String),
+    /// A text for clients without the payment widget, followed by the widget event.
+    X402Request {
+        text: String,
+        content: Box<X402RequestContent>,
+    },
+}
+
 async fn run(
     controller_type: &BillingControllerType,
     message_context: &MessageContext,
     bot: &Bot,
     billing: &BillingContext,
-) -> Result<String, String> {
+    billing_config: &ConfigBilling,
+) -> Reply {
     let sender_id = message_context.sender_id();
-    let is_admin = BillingCommandAccess::determine(bot.billing_config(), sender_id).is_admin();
+    let is_admin = BillingCommandAccess::determine(Some(billing_config), sender_id).is_admin();
+    let topup_available = bot.x402_client().is_some();
 
     match controller_type {
-        BillingControllerType::Help => Ok(handlers::help(bot.command_prefix(), is_admin)),
+        BillingControllerType::Help => Reply::Text(handlers::help(
+            bot.command_prefix(),
+            is_admin,
+            topup_available,
+        )),
 
         BillingControllerType::Balance => {
             handlers::balance(&billing.service, message_context.room_id().as_str(), 5)
                 .await
-                .map_err(|e| strings::billing::command_failed("balance", &e.to_string()))
+                .map_or_else(
+                    |e| Reply::Error(strings::billing::command_failed("balance", &e.to_string())),
+                    Reply::Text,
+                )
+        }
+
+        BillingControllerType::Topup { amount_usd } => {
+            let Some(x402_client) = bot.x402_client() else {
+                return Reply::Error(strings::billing::topup_not_configured().to_owned());
+            };
+
+            let amount_usd = amount_usd.unwrap_or(billing_config.min_topup_usd);
+            if amount_usd < billing_config.min_topup_usd
+                || amount_usd > billing_config.max_topup_usd
+            {
+                return Reply::Error(strings::billing::topup_amount_out_of_range(
+                    billing_config.min_topup_usd,
+                    billing_config.max_topup_usd,
+                ));
+            }
+
+            match x402_client
+                .create_x402_request_content(
+                    message_context.room_id().as_str(),
+                    sender_id.as_str(),
+                    amount_usd,
+                    billing_config.min_topup_usd,
+                    bot.command_prefix(),
+                )
+                .await
+            {
+                Ok(content) => Reply::X402Request {
+                    text: handlers::topup_invoice(amount_usd),
+                    content: Box::new(content),
+                },
+                Err(e) => {
+                    tracing::warn!(error = %e, "The payment sidecar refused a topup request");
+                    Reply::Error(strings::billing::topup_request_failed(&e.to_string()))
+                }
+            }
         }
 
         BillingControllerType::StatsDay => handlers::stats(
@@ -62,7 +138,15 @@ async fn run(
             billing.wrapper_config.daily_cap_usd,
         )
         .await
-        .map_err(|e| strings::billing::command_failed("stats day", &e.to_string())),
+        .map_or_else(
+            |e| {
+                Reply::Error(strings::billing::command_failed(
+                    "stats day",
+                    &e.to_string(),
+                ))
+            },
+            Reply::Text,
+        ),
 
         BillingControllerType::StatsMonth => handlers::stats(
             &billing.service,
@@ -70,12 +154,28 @@ async fn run(
             billing.wrapper_config.monthly_cap_usd,
         )
         .await
-        .map_err(|e| strings::billing::command_failed("stats month", &e.to_string())),
+        .map_or_else(
+            |e| {
+                Reply::Error(strings::billing::command_failed(
+                    "stats month",
+                    &e.to_string(),
+                ))
+            },
+            Reply::Text,
+        ),
 
         BillingControllerType::Zombies { older_than_minutes } => {
             handlers::list_zombies(&billing.service, *older_than_minutes, bot.command_prefix())
                 .await
-                .map_err(|e| strings::billing::command_failed("billing zombies", &e.to_string()))
+                .map_or_else(
+                    |e| {
+                        Reply::Error(strings::billing::command_failed(
+                            "billing zombies",
+                            &e.to_string(),
+                        ))
+                    },
+                    Reply::Text,
+                )
         }
 
         BillingControllerType::ManualRelease {
@@ -88,7 +188,15 @@ async fn run(
             reason,
         )
         .await
-        .map_err(|e| strings::billing::command_failed("billing manual-release", &e.to_string())),
+        .map_or_else(
+            |e| {
+                Reply::Error(strings::billing::command_failed(
+                    "billing manual-release",
+                    &e.to_string(),
+                ))
+            },
+            Reply::Text,
+        ),
 
         BillingControllerType::ManualRefund {
             room_id,
@@ -102,16 +210,24 @@ async fn run(
             reason,
         )
         .await
-        .map_err(|e| strings::billing::command_failed("billing manual-refund", &e.to_string())),
+        .map_or_else(
+            |e| {
+                Reply::Error(strings::billing::command_failed(
+                    "billing manual-refund",
+                    &e.to_string(),
+                ))
+            },
+            Reply::Text,
+        ),
 
         BillingControllerType::AccessDenied { command } => {
-            Err(strings::billing::access_denied(command))
+            Reply::Error(strings::billing::access_denied(command))
         }
 
-        BillingControllerType::ParseError { command, reason } => Err(format!(
+        BillingControllerType::ParseError { command, reason } => Reply::Error(format!(
             "{}\n\n{}",
             strings::billing::invalid_command(command, reason),
-            handlers::help(bot.command_prefix(), is_admin),
+            handlers::help(bot.command_prefix(), is_admin, topup_available),
         )),
     }
 }

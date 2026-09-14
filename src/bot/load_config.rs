@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use crate::agent::AgentPurpose;
 
 pub use crate::entity::cfg::{
-    Avatar, Config, ConfigBilling, defaults as cfg_defaults, env as cfg_env,
+    Avatar, Config, ConfigBilling, ConfigX402, defaults as cfg_defaults, env as cfg_env,
 };
 
 pub fn load() -> anyhow::Result<Config> {
@@ -150,6 +150,27 @@ pub fn load() -> anyhow::Result<Config> {
             cfg_env::BAIBOT_BILLING_DB_PATH => {
                 billing_section(&mut config).db_path = optional_non_empty(value);
             }
+            cfg_env::BAIBOT_X402_SIDECAR_URL => {
+                x402_section(&mut config).sidecar_url = value;
+            }
+            cfg_env::BAIBOT_X402_INTERNAL_SECRET => {
+                x402_section(&mut config).internal_secret = value;
+            }
+            cfg_env::BAIBOT_X402_INTERNAL_BIND => {
+                x402_section(&mut config).internal_bind = value.parse().map_err(|e| {
+                    anyhow!("The {key} environment variable must be an IP address: {e}")
+                })?;
+            }
+            cfg_env::BAIBOT_X402_INTERNAL_PORT => {
+                x402_section(&mut config).internal_port = value.parse().map_err(|e| {
+                    anyhow!("The {key} environment variable must be a port number: {e}")
+                })?;
+            }
+            cfg_env::BAIBOT_X402_ALLOW_NON_LOOPBACK_BIND => {
+                x402_section(&mut config).allow_non_loopback_bind = value.parse().map_err(|e| {
+                    anyhow!("The {key} environment variable must be true or false: {e}")
+                })?;
+            }
             _ => {}
         }
     }
@@ -167,6 +188,11 @@ fn optional_non_empty(value: String) -> Option<String> {
 /// file has no `billing` section, so a deployment can turn it on from the environment alone.
 fn billing_section(config: &mut Config) -> &mut ConfigBilling {
     config.billing.get_or_insert_with(ConfigBilling::default)
+}
+
+/// Same rule for `BAIBOT_X402_*`: any of them creates the `x402` section.
+fn x402_section(config: &mut Config) -> &mut ConfigX402 {
+    config.x402.get_or_insert_with(ConfigX402::default)
 }
 
 fn parse_f64(key: &str, value: &str) -> anyhow::Result<f64> {

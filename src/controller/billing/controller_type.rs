@@ -38,6 +38,9 @@ pub enum BillingControllerType {
     Help,
     /// `balance`: the balance of the current room and its last few ledger entries.
     Balance,
+    /// `topup [<amount_usd>]`: asks the payment sidecar for a payment request and sends it to
+    /// the room as a `cc.chums.x402_request` event. Without an amount, `billing.min_topup_usd`.
+    Topup { amount_usd: Option<f64> },
     /// `stats day` (administrators): bot-wide spending today against the daily cap.
     StatsDay,
     /// `stats month` (administrators): bot-wide spending this month against the monthly cap.

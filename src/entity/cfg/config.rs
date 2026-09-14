@@ -38,6 +38,11 @@ pub struct Config {
     /// Optional. When absent, the bot runs without billing.
     #[serde(default)]
     pub billing: Option<super::billing::ConfigBilling>,
+
+    /// Optional. Top-ups of the billing ledger through the x402 payment sidecar.
+    /// Requires `billing`.
+    #[serde(default)]
+    pub x402: Option<super::x402::ConfigX402>,
 }
 
 impl Config {
@@ -60,6 +65,16 @@ impl Config {
 
         if let Some(billing) = &self.billing {
             billing.validate()?;
+        }
+
+        if let Some(x402) = &self.x402 {
+            if self.billing.is_none() {
+                return Err(anyhow::anyhow!(
+                    "The x402 configuration section requires the billing section: top-ups are credited to the billing ledger"
+                ));
+            }
+
+            x402.validate()?;
         }
 
         Ok(())

@@ -67,3 +67,11 @@ pub(super) fn billing_max_topup_usd() -> f64 {
 pub(super) fn billing_db_file_name() -> String {
     BILLING_DB_FILE_NAME.to_owned()
 }
+
+pub(super) fn x402_internal_bind() -> std::net::IpAddr {
+    std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+}
+
+pub(super) fn x402_internal_port() -> u16 {
+    9000
+}

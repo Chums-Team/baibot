@@ -26,9 +26,10 @@ use crate::billing::{BillingContext, BillingService};
 use crate::entity::catch_up_marker::{
     CatchUpMarker, CatchUpMarkerManager, DelayedCatchUpMarkerManager,
 };
-use crate::entity::cfg::{Avatar, Config, ConfigBilling, ConfigUserAuth};
+use crate::entity::cfg::{Avatar, Config, ConfigBilling, ConfigUserAuth, ConfigX402};
 use crate::entity::globalconfig::{GlobalConfig, GlobalConfigurationManager};
 use crate::entity::roomconfig::{RoomConfig, RoomConfigurationManager};
+use crate::x402::X402Client;
 
 use crate::agent::Manager;
 
@@ -66,6 +67,9 @@ struct BotInner {
 
     /// Present only when the `billing` configuration section is set.
     billing: Option<BillingContext>,
+
+    /// Present only when the `x402` configuration section is set.
+    x402_client: Option<X402Client>,
 }
 
 /// Bot represents a bot instance.
@@ -120,6 +124,7 @@ impl Bot {
         );
 
         let billing = open_billing(&config)?;
+        let x402_client = create_x402_client(&config)?;
 
         Ok(Self {
             inner: Arc::new(BotInner {
@@ -134,6 +139,7 @@ impl Bot {
                 agent_manager,
                 admin_pattern_regexes,
                 billing,
+                x402_client,
             }),
         })
     }
@@ -146,6 +152,16 @@ impl Bot {
     /// The `billing` configuration section, when present.
     pub(crate) fn billing_config(&self) -> Option<&ConfigBilling> {
         self.inner.config.billing.as_ref()
+    }
+
+    /// The client of the x402 payment sidecar, when the `x402` section is configured.
+    pub(crate) fn x402_client(&self) -> Option<&X402Client> {
+        self.inner.x402_client.as_ref()
+    }
+
+    /// The `x402` configuration section, when present.
+    pub(crate) fn x402_config(&self) -> Option<&ConfigX402> {
+        self.inner.config.x402.as_ref()
     }
 
     pub(crate) fn admin_patterns(&self) -> &Vec<String> {
@@ -262,6 +278,9 @@ impl Bot {
     }
 
     pub async fn start(&self) -> anyhow::Result<()> {
+        // Before anything Matrix-side: a bind failure should abort startup, not a running sync.
+        self.start_x402().await?;
+
         self.rooms().attach_event_handlers().await;
         self.messaging().attach_event_handlers().await;
         self.reacting().attach_event_handlers().await;
@@ -520,6 +539,18 @@ pub fn create_catch_up_marker_manager(matrix_link: MatrixLink) -> CatchUpMarkerM
 
 async fn create_initial_catch_up_marker() -> CatchUpMarker {
     CatchUpMarker::new(0)
+}
+
+/// Builds the sidecar client when the `x402` configuration section is present.
+fn create_x402_client(config: &Config) -> anyhow::Result<Option<X402Client>> {
+    let Some(x402) = &config.x402 else {
+        return Ok(None);
+    };
+
+    let client = X402Client::new(x402.sidecar_url.clone())
+        .map_err(|e| anyhow::anyhow!("Failed building the x402 sidecar client: {}", e))?;
+
+    Ok(Some(client))
 }
 
 /// Opens the billing ledger when the `billing` configuration section is present.

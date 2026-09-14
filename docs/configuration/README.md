@@ -24,7 +24,7 @@ You can see the list of supported environment variables in the [🦀 src/entity/
 
 For Matrix-account authentication setup, see [🔐 Authentication](./authentication.md).
 
-For the optional accounting of LLM calls, see [💰 Billing](./billing.md).
+For the optional accounting of LLM calls, see [💰 Billing](./billing.md), and for paying into a room balance, [💸 x402 top-ups](./x402.md).
 
 
 ### Dynamic configuration

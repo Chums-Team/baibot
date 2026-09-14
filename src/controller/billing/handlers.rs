@@ -141,12 +141,31 @@ pub async fn manual_refund(
     ))
 }
 
+// ===== `topup` =====
+
+/// The text sent together with a `cc.chums.x402_request` event, for clients that do not
+/// render the payment widget.
+pub fn topup_invoice(amount_required_usd: f64) -> String {
+    format!(
+        "To top up the agent's balance in this room, pay **${amount_required_usd:.2}** in USDT (TRC-20) through the payment widget. \
+         If no widget appears, your client does not support x402 payments yet; use the Chums web client."
+    )
+}
+
 // ===== `billing help` =====
 
-pub fn help(command_prefix: &str, is_admin: bool) -> String {
+/// `topup_available` is whether the `x402` section is configured; the `topup` command is
+/// listed only then.
+pub fn help(command_prefix: &str, is_admin: bool, topup_available: bool) -> String {
     let mut out = format!(
         "- `{command_prefix} balance` — show the agent's balance in this room and recent transactions.\n"
     );
+
+    if topup_available {
+        out.push_str(&format!(
+            "- `{command_prefix} topup [<amount_usd>]` — top up the balance of this room with a USDT (TRC-20) payment.\n"
+        ));
+    }
 
     if is_admin {
         out.push_str("\n**Administration commands**\n\n");

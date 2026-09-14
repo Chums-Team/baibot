@@ -9,7 +9,7 @@ With the section present, every LLM text-generation call is accounted for in an 
 
 Only [OpenRouter](../providers.md#openrouter) reports the cost of a call: after each text generation, the bot asks OpenRouter for the cost of that completion. For every other provider (and when the lookup fails), the cost is estimated from the token counts via the pricing table.
 
-Rooms are funded by top-ups. How top-ups arrive is a separate concern (see the x402 integration); the ledger only records them.
+Rooms are funded by top-ups. Users can pay into a room through the optional [💸 x402 top-ups](./x402.md) integration; administrators can credit a room by hand. The ledger only records them.
 
 
 ### Configuration
@@ -61,6 +61,7 @@ When billing is configured, the following commands are available (the prefix is 
 Available to everyone in the room:
 
 - `!bai balance` — the balance of the current room and its last 5 ledger entries.
+- `!bai topup [<amount_usd>]` — pay into the room balance. Needs the [x402 integration](./x402.md).
 - `!bai billing` (or `!bai billing help`) — a summary of the billing commands.
 
 Available to the users listed in `billing.admin_mxids` only:
@@ -75,7 +76,7 @@ The reason is mandatory and must be enclosed in double quotes.
 
 ### What happens around a call
 
-- **Balance below `reserve_amount_usd`**: the bot replies with the current balance and the amount needed, and does not call the LLM.
+- **Balance below `reserve_amount_usd`**: the bot replies with the current balance and the amount needed, and does not call the LLM. With the [x402 integration](./x402.md) configured, it also sends a [`cc.chums.x402_request` event](../matrix-events.md) so the Chums client offers to pay the missing amount right away.
 - **A cap is reached**: the bot replies that the service is paused and when it resumes (the start of the next UTC day or month), and does not call the LLM. It also sends a [`cc.chums.cap_hit` event](../matrix-events.md) that the Chums client renders as a banner.
 - **The ledger is unavailable** (e.g. the database cannot be read): the bot replies that billing is temporarily unavailable, and does not call the LLM.
 - **The provider call fails**: the reserve stays in the ledger as a "zombie" for manual review, because a half-completed call may still have cost money. Zombies are surfaced by the billing administration commands.

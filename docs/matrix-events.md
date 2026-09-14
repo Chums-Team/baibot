@@ -28,7 +28,7 @@ A bot-wide daily or monthly spending cap (see `daily_cap_usd` / `monthly_cap_usd
 
 ### `cc.chums.x402_request`
 
-The room balance is below `reserve_amount_usd`. The bot will not call the LLM until the room is topped up.
+The room balance is below `reserve_amount_usd` (the bot will not call the LLM until the room is topped up), or a user ran the `topup` command. Sent only when the [x402 integration](./configuration/x402.md) is configured; the plain text message that accompanies it explains how to pay.
 
 ```json
 {

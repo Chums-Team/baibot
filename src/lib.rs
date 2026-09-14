@@ -13,6 +13,7 @@ mod entity;
 pub mod matrix;
 mod strings;
 mod utils;
+mod x402;
 
 pub use bot::{Bot, load_config};
 pub use entity::cfg::Config;

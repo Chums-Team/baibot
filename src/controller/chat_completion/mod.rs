@@ -699,13 +699,14 @@ async fn handle_stage_text_generation(
             current_balance_usd,
             reserve_amount_usd,
         } => {
-            bot.messaging()
-                .send_text_markdown_no_fail(
-                    message_context.room(),
-                    strings::billing::insufficient_balance(current_balance_usd, reserve_amount_usd),
-                    response_type,
-                )
-                .await;
+            announce_insufficient_balance(
+                bot,
+                message_context,
+                current_balance_usd,
+                reserve_amount_usd,
+                response_type,
+            )
+            .await;
 
             return None;
         }
@@ -1074,6 +1075,75 @@ fn inject_sender_context(
         .collect();
 
     Conversation { messages }
+}
+
+/// Tells the room that its balance is too low for the next reply.
+///
+/// With the x402 integration configured, the bot also asks the payment sidecar for a payment
+/// request and sends it as a `cc.chums.x402_request` event, so the Chums client shows the
+/// payment widget. When the sidecar cannot be reached, the text falls back to the `topup`
+/// command; without the integration, the text only asks to top up.
+async fn announce_insufficient_balance(
+    bot: &Bot,
+    message_context: &MessageContext,
+    current_balance_usd: f64,
+    reserve_amount_usd: f64,
+    response_type: MessageResponseType,
+) {
+    let (Some(x402_client), Some(billing_config)) = (bot.x402_client(), bot.billing_config())
+    else {
+        bot.messaging()
+            .send_text_markdown_no_fail(
+                message_context.room(),
+                strings::billing::insufficient_balance(current_balance_usd, reserve_amount_usd),
+                response_type,
+            )
+            .await;
+        return;
+    };
+
+    let topup_amount_usd =
+        (reserve_amount_usd - current_balance_usd).max(billing_config.min_topup_usd);
+
+    let widget_sent = match x402_client
+        .create_x402_request_content(
+            message_context.room_id().as_str(),
+            message_context.sender_id().as_str(),
+            topup_amount_usd,
+            billing_config.min_topup_usd,
+            bot.command_prefix(),
+        )
+        .await
+    {
+        Ok(content) => {
+            match crate::matrix::events::emit_x402_request(message_context.room(), &content).await {
+                Ok(_) => true,
+                Err(e) => {
+                    tracing::warn!(error = %e, "emit_x402_request failed");
+                    false
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "The payment sidecar refused a payment request; sending text only");
+            false
+        }
+    };
+
+    let text = if widget_sent {
+        strings::billing::insufficient_balance_with_widget(current_balance_usd, reserve_amount_usd)
+    } else {
+        strings::billing::insufficient_balance_with_topup_command(
+            current_balance_usd,
+            reserve_amount_usd,
+            bot.command_prefix(),
+            topup_amount_usd,
+        )
+    };
+
+    bot.messaging()
+        .send_text_markdown_no_fail(message_context.room(), text, response_type)
+        .await;
 }
 
 fn next_utc_day_boundary() -> chrono::DateTime<chrono::Utc> {
