@@ -724,12 +724,27 @@ async fn handle_stage_text_generation(
             let resumes_at = match period {
                 billing_glue::CapPeriod::Daily => next_utc_day_boundary(),
                 billing_glue::CapPeriod::Monthly => next_utc_month_boundary(),
+            }
+            .to_rfc3339();
+
+            // The custom event lets the Chums client render a banner; the text message that
+            // follows is for clients that do not recognize the event.
+            let content = crate::matrix::events::CapHitContent {
+                period: period.into(),
+                cap_usd,
+                current_spent_usd: spent_usd,
+                retries_at: resumes_at.clone(),
             };
+            if let Err(err) =
+                crate::matrix::events::emit_cap_hit(message_context.room(), &content).await
+            {
+                tracing::warn!(error = %err, "Billing: failed to send the cap-hit event");
+            }
 
             bot.messaging()
                 .send_text_markdown_no_fail(
                     message_context.room(),
-                    strings::billing::cap_hit(period.as_str(), cap_usd, &resumes_at.to_rfc3339()),
+                    strings::billing::cap_hit(period.as_str(), cap_usd, &resumes_at),
                     response_type,
                 )
                 .await;

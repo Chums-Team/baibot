@@ -46,6 +46,15 @@ impl CapPeriod {
     }
 }
 
+impl From<CapPeriod> for crate::matrix::events::CapPeriod {
+    fn from(period: CapPeriod) -> Self {
+        match period {
+            CapPeriod::Daily => Self::Daily,
+            CapPeriod::Monthly => Self::Monthly,
+        }
+    }
+}
+
 /// What the chat-completion handler should do next after the billing pre-check.
 #[derive(Debug, Clone, PartialEq)]
 enum BillingDecision {

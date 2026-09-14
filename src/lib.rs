@@ -10,6 +10,7 @@ mod bot;
 mod controller;
 mod conversation;
 mod entity;
+pub mod matrix;
 mod strings;
 mod utils;
 

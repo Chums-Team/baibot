@@ -76,7 +76,7 @@ The reason is mandatory and must be enclosed in double quotes.
 ### What happens around a call
 
 - **Balance below `reserve_amount_usd`**: the bot replies with the current balance and the amount needed, and does not call the LLM.
-- **A cap is reached**: the bot replies that the service is paused and when it resumes (the start of the next UTC day or month), and does not call the LLM.
+- **A cap is reached**: the bot replies that the service is paused and when it resumes (the start of the next UTC day or month), and does not call the LLM. It also sends a [`cc.chums.cap_hit` event](../matrix-events.md) that the Chums client renders as a banner.
 - **The ledger is unavailable** (e.g. the database cannot be read): the bot replies that billing is temporarily unavailable, and does not call the LLM.
 - **The provider call fails**: the reserve stays in the ledger as a "zombie" for manual review, because a half-completed call may still have cost money. Zombies are surfaced by the billing administration commands.
 - **The call succeeds but the ledger write fails**: the reply is still delivered and the failure is logged for manual reconciliation.
