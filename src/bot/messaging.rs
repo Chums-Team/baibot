@@ -366,10 +366,16 @@ impl Messaging {
         )
         .with_bot_display_name(bot_display_name);
 
+        let billing_command_access = crate::controller::billing::BillingCommandAccess::determine(
+            self.bot.billing_config(),
+            &event.sender,
+        );
+
         let controller_type = crate::controller::determine_controller(
             self.bot.command_prefix(),
             &interaction_context.trigger,
             &message_context,
+            billing_command_access,
         );
 
         tracing::info!(?controller_type, "Determined controller");

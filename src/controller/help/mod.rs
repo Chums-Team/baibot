@@ -65,6 +65,19 @@ pub async fn handle(bot: &Bot, message_context: &MessageContext) -> anyhow::Resu
     ));
     message.push_str("\n\n");
 
+    // Billing
+    if bot.billing().is_some() {
+        message.push_str(&format!("## {}", strings::help::billing::heading()));
+        message.push_str("\n\n");
+        message.push_str(strings::help::billing::intro());
+        message.push_str("\n\n");
+        message.push_str(&strings::help::learn_more_send_a_command(
+            bot.command_prefix(),
+            "billing",
+        ));
+        message.push_str("\n\n");
+    }
+
     // Usage
     message.push_str(&format!("## {}", strings::help::usage::heading()));
     message.push_str("\n\n");

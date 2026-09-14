@@ -1,5 +1,6 @@
 pub mod access;
 pub mod agent;
+pub mod billing;
 pub mod cfg;
 pub mod provider;
 pub mod usage;

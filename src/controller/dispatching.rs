@@ -19,6 +19,9 @@ pub async fn dispatch_controller(
         ControllerType::Config(controller_type) => {
             super::cfg::dispatch_controller(controller_type, message_context, bot).await
         }
+        ControllerType::Billing(controller_type) => {
+            super::billing::dispatch_controller(controller_type, message_context, bot).await
+        }
         ControllerType::Help => super::help::handle(bot, message_context).await,
         ControllerType::Unknown => {
             bot.messaging()

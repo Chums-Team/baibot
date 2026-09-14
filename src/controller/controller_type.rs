@@ -20,6 +20,8 @@ pub enum ControllerType {
 
     Config(super::cfg::ConfigControllerType),
 
+    Billing(super::billing::BillingControllerType),
+
     ChatCompletion(super::chat_completion::ChatCompletionControllerType),
 
     ImageGeneration(String),

@@ -26,7 +26,7 @@ use crate::billing::{BillingContext, BillingService};
 use crate::entity::catch_up_marker::{
     CatchUpMarker, CatchUpMarkerManager, DelayedCatchUpMarkerManager,
 };
-use crate::entity::cfg::{Avatar, Config, ConfigUserAuth};
+use crate::entity::cfg::{Avatar, Config, ConfigBilling, ConfigUserAuth};
 use crate::entity::globalconfig::{GlobalConfig, GlobalConfigurationManager};
 use crate::entity::roomconfig::{RoomConfig, RoomConfigurationManager};
 
@@ -141,6 +141,11 @@ impl Bot {
     /// The billing feature, when configured.
     pub(crate) fn billing(&self) -> Option<&BillingContext> {
         self.inner.billing.as_ref()
+    }
+
+    /// The `billing` configuration section, when present.
+    pub(crate) fn billing_config(&self) -> Option<&ConfigBilling> {
+        self.inner.config.billing.as_ref()
     }
 
     pub(crate) fn admin_patterns(&self) -> &Vec<String> {

@@ -2,6 +2,7 @@ mod controller_type;
 
 pub mod access;
 pub mod agent;
+pub mod billing;
 pub mod cfg;
 pub mod chat_completion;
 mod determination;

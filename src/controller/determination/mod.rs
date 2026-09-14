@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use super::billing::BillingCommandAccess;
 use super::chat_completion::ChatCompletionControllerType;
 use crate::{
     entity::{
@@ -16,6 +17,7 @@ pub fn determine_controller(
     command_prefix: &str,
     first_thread_message: &InteractionTrigger,
     message_context: &MessageContext,
+    billing_access: BillingCommandAccess,
 ) -> ControllerType {
     match &first_thread_message.payload {
         MessagePayload::SynthethicChatCompletionTriggerInThread => {
@@ -34,6 +36,7 @@ pub fn determine_controller(
                 &text_message_content.body,
                 prefix_requirement_type,
                 first_thread_message.is_mentioning_bot,
+                billing_access,
             )
         }
         MessagePayload::Image(_image_message_content) => {
@@ -84,6 +87,7 @@ fn determine_text_controller(
     text: &str,
     room_text_generation_prefix_requirement_type: TextGenerationPrefixRequirementType,
     is_mentioning_bot: bool,
+    billing_access: BillingCommandAccess,
 ) -> ControllerType {
     let text = text.trim();
 
@@ -119,6 +123,15 @@ fn determine_text_controller(
         return super::usage::determine_controller(remaining.trim());
     }
 
+    // Billing commands exist only when billing is configured (`billing_access` is not `Disabled`).
+    // Otherwise the text falls through and is treated like upstream does: as a chat completion.
+    if let Some(remaining) = strip_billing_command(command_prefix, text)
+        && let Some(billing_controller_type) =
+            super::billing::determine_controller(remaining, billing_access)
+    {
+        return ControllerType::Billing(billing_controller_type);
+    }
+
     // Regular text message that does not match any command.
     // If it mentions the bot, it's a chat completion.
     // Otherwise, it depends on the prefix requirement for text generation - it may be routed for chat completion or ignored.
@@ -146,4 +159,20 @@ fn determine_text_controller(
             ControllerType::ChatCompletion(ChatCompletionControllerType::TextDirect)
         }
     }
+}
+
+/// Returns the text after the command prefix when it starts with one of the billing command
+/// heads (`balance`, `stats`, `billing`) as a whole word, so that the billing parser sees
+/// e.g. `stats day`. Free-form text after the prefix is not a billing command.
+fn strip_billing_command<'a>(command_prefix: &str, text: &'a str) -> Option<&'a str> {
+    let remaining = text
+        .strip_prefix(command_prefix)?
+        .strip_prefix(char::is_whitespace)?
+        .trim_start();
+
+    let head = remaining.split_whitespace().next()?;
+
+    super::billing::COMMAND_HEADS
+        .contains(&head)
+        .then_some(remaining)
 }

@@ -52,6 +52,25 @@ Every key can be overridden with an environment variable, following the usual na
 A room may override `markup_pct` through the `billing.markup_override_pct` key of its [room configuration](./README.md#dynamic-configuration). Values that are not positive finite numbers are ignored. There is no chat command for this setting yet.
 
 
+### Chat commands
+
+When billing is configured, the following commands are available (the prefix is your `command_prefix`, `!bai` by default). Without a `billing` section none of them exist, and such messages are handled like any other text.
+
+Available to everyone in the room:
+
+- `!bai balance` — the balance of the current room and its last 5 ledger entries.
+- `!bai billing` (or `!bai billing help`) — a summary of the billing commands.
+
+Available to the users listed in `billing.admin_mxids` only:
+
+- `!bai stats day` / `!bai stats month` — bot-wide spending for the current UTC day or month against the corresponding cap.
+- `!bai billing zombies [<minutes>]` — reserves older than the given number of minutes (default `10`) that were never charged or released. These appear when a provider call fails mid-way.
+- `!bai billing manual-release <event_id> "<reason>"` — credits a zombie reserve back to its room. `<event_id>` is the ledger id shown by `billing zombies`; the reason is recorded in the ledger together with the administrator's user id.
+- `!bai billing manual-refund <room_id> <amount_usd> "<reason>"` — credits an amount to a room, e.g. after returning a top-up off-chain. Also recorded with the reason and the administrator's user id.
+
+The reason is mandatory and must be enclosed in double quotes.
+
+
 ### What happens around a call
 
 - **Balance below `reserve_amount_usd`**: the bot replies with the current balance and the amount needed, and does not call the LLM.
