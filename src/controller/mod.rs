@@ -16,5 +16,5 @@ pub mod usage;
 mod utils;
 
 pub use controller_type::ControllerType;
-pub use determination::determine_controller;
+pub use determination::{COMMAND_HEADS, determine_controller};
 pub use dispatching::dispatch_controller;

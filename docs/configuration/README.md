@@ -28,6 +28,8 @@ For the optional accounting of LLM calls, see [💰 Billing](./billing.md), and 
 
 For the language of the bot's replies to users of the Chums client, and for a custom introduction message per language, see [🌍 Localization](./i18n.md).
 
+For reserving the bot's commands for administrators, see [🔒 Access / 🚧 Administrator-only commands](../access.md#-administrator-only-commands).
+
 
 ### Dynamic configuration
 

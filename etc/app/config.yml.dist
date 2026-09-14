@@ -69,6 +69,13 @@ access:
   admin_patterns:
     - "@admin:__HOMESERVER_SERVER_NAME__"
 
+  # Optional. When true, the bot's commands (`!bai help`, `!bai config ...`, etc.) sent by users
+  # who are not administrators are ignored without a reply, except the commands listed in
+  # `commands_admin_exempt` (by their first word). Conversation with the bot is not affected.
+  # See docs/access.md.
+  # commands_admin_only: false
+  # commands_admin_exempt: [balance, topup, image]
+
 persistence:
   # This is unset here, because we expect the configuration to come from an environment variable (BAIBOT_PERSISTENCE_DATA_DIR_PATH).
   # In your setup, you may wish to set this to a directory path.

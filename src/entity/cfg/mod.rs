@@ -6,6 +6,6 @@ mod i18n;
 mod x402;
 
 pub use billing::ConfigBilling;
-pub use config::{Avatar, Config, ConfigUserAuth, PersistenceConfig};
+pub use config::{Avatar, Config, ConfigAccess, ConfigUserAuth, PersistenceConfig};
 pub use i18n::ConfigI18n;
 pub use x402::ConfigX402;

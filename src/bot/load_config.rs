@@ -67,6 +67,16 @@ pub fn load() -> anyhow::Result<Config> {
                     .filter(|s| !s.is_empty())
                     .collect();
             }
+            cfg_env::BAIBOT_ACCESS_COMMANDS_ADMIN_ONLY => {
+                config.access.commands_admin_only = value.parse::<bool>()?;
+            }
+            cfg_env::BAIBOT_ACCESS_COMMANDS_ADMIN_EXEMPT => {
+                config.access.commands_admin_exempt = value
+                    .split([' ', ','])
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+            }
             cfg_env::BAIBOT_PERSISTENCE_DATA_DIR_PATH => {
                 config.persistence.data_dir_path = Some(value);
             }

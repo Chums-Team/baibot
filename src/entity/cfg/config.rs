@@ -453,9 +453,28 @@ pub struct ConfigAccess {
     // Contains the admin whitelist patterns before parsing into regex.
     // Example: `["@*:example.com"]`
     pub admin_patterns: Vec<String>,
+
+    /// Optional. When `true`, the bot's commands (`<command_prefix> help`, `… config`, …) sent
+    /// by users who are not administrators are ignored without a reply, except the commands
+    /// listed in `commands_admin_exempt`. Conversation (plain text, mentions,
+    /// `<command_prefix> <free text>`) is not affected. Default `false`.
+    /// See `docs/access.md`.
+    #[serde(default)]
+    pub commands_admin_only: bool,
+
+    /// Optional. The commands (by their first word: `balance`, `image`, …) that everyone may
+    /// use when `commands_admin_only` is on. Default: `balance`, `topup`, `image`.
+    #[serde(default = "super::defaults::access_commands_admin_exempt")]
+    pub commands_admin_exempt: Vec<String>,
 }
 
 impl ConfigAccess {
+    /// Whether the command whose first word is `head` is reserved for administrators.
+    /// `false` when `commands_admin_only` is off.
+    pub fn is_command_admin_only(&self, head: &str) -> bool {
+        self.commands_admin_only && !self.commands_admin_exempt.iter().any(|h| h == head)
+    }
+
     // Returns the the mxidwc-parsed regexes for the admin whitelist.
     // Example: `["^@\.*:example\.com$"]`
     pub fn admin_pattern_regexes(&self) -> anyhow::Result<Vec<regex::Regex>> {
@@ -477,6 +496,18 @@ impl ConfigAccess {
         }
 
         self.admin_pattern_regexes()?;
+
+        let known = crate::controller::COMMAND_HEADS;
+        for head in &self.commands_admin_exempt {
+            if !known.contains(&head.as_str()) {
+                return Err(anyhow::anyhow!(
+                    "The access.commands_admin_exempt ({}) configuration contains an unknown command `{}`. Known commands: {}",
+                    super::env::BAIBOT_ACCESS_COMMANDS_ADMIN_EXEMPT,
+                    head,
+                    known.join(", "),
+                ));
+            }
+        }
 
         Ok(())
     }

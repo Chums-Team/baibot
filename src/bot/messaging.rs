@@ -376,6 +376,7 @@ impl Messaging {
             &interaction_context.trigger,
             &message_context,
             billing_command_access,
+            self.bot.access_config(),
         );
 
         tracing::info!(?controller_type, "Determined controller");

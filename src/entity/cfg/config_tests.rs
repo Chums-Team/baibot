@@ -193,3 +193,66 @@ mod room {
         assert!(err.contains("`ru`"), "{err}");
     }
 }
+
+mod access {
+    use super::super::ConfigAccess;
+
+    fn access(commands_admin_only: bool, exempt: &[&str]) -> ConfigAccess {
+        ConfigAccess {
+            admin_patterns: vec!["@admin:example.com".to_owned()],
+            commands_admin_only,
+            commands_admin_exempt: exempt.iter().map(|s| (*s).to_owned()).collect(),
+        }
+    }
+
+    #[test]
+    fn defaults_keep_the_commands_open() {
+        let cfg: ConfigAccess =
+            serde_yaml_ng::from_str("admin_patterns: ['@admin:example.com']").unwrap();
+
+        assert!(!cfg.commands_admin_only);
+        assert_eq!(cfg.commands_admin_exempt, ["balance", "topup", "image"]);
+        assert!(!cfg.is_command_admin_only("help"));
+        cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn parses_the_gate() {
+        let cfg: ConfigAccess = serde_yaml_ng::from_str(
+            "admin_patterns: ['@admin:example.com']\ncommands_admin_only: true\ncommands_admin_exempt: [balance]",
+        )
+        .unwrap();
+
+        assert!(cfg.commands_admin_only);
+        assert_eq!(cfg.commands_admin_exempt, ["balance"]);
+        cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn exempt_commands_are_open_when_the_gate_is_on() {
+        let cfg = access(true, &["balance", "topup"]);
+
+        assert!(cfg.is_command_admin_only("help"));
+        assert!(cfg.is_command_admin_only("config"));
+        assert!(!cfg.is_command_admin_only("balance"));
+        assert!(!cfg.is_command_admin_only("topup"));
+    }
+
+    #[test]
+    fn nothing_is_admin_only_when_the_gate_is_off() {
+        let cfg = access(false, &[]);
+
+        assert!(!cfg.is_command_admin_only("help"));
+        assert!(!cfg.is_command_admin_only("config"));
+    }
+
+    #[test]
+    fn rejects_an_unknown_exempt_command() {
+        let err = access(true, &["balance", "balanse"])
+            .validate()
+            .unwrap_err();
+
+        assert!(err.to_string().contains("`balanse`"), "{err}");
+        assert!(err.to_string().contains("balance, topup"), "{err}");
+    }
+}

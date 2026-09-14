@@ -24,6 +24,13 @@ pub(super) fn room_post_join_self_introduction_enabled() -> bool {
     true
 }
 
+pub(super) fn access_commands_admin_exempt() -> Vec<String> {
+    ["balance", "topup", "image"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
 pub(super) fn i18n_fallback_locale() -> String {
     crate::i18n::DEFAULT_LOCALE.to_owned()
 }

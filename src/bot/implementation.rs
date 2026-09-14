@@ -27,7 +27,9 @@ use crate::billing::{BillingContext, BillingService};
 use crate::entity::catch_up_marker::{
     CatchUpMarker, CatchUpMarkerManager, DelayedCatchUpMarkerManager,
 };
-use crate::entity::cfg::{Avatar, Config, ConfigBilling, ConfigI18n, ConfigUserAuth, ConfigX402};
+use crate::entity::cfg::{
+    Avatar, Config, ConfigAccess, ConfigBilling, ConfigI18n, ConfigUserAuth, ConfigX402,
+};
 use crate::entity::globalconfig::{GlobalConfig, GlobalConfigurationManager};
 use crate::entity::roomconfig::{RoomConfig, RoomConfigurationManager};
 use crate::i18n::UserLocaleManager;
@@ -182,6 +184,11 @@ impl Bot {
 
     pub(crate) fn admin_patterns(&self) -> &Vec<String> {
         &self.inner.config.access.admin_patterns
+    }
+
+    /// The `access` configuration section.
+    pub(crate) fn access_config(&self) -> &ConfigAccess {
+        &self.inner.config.access
     }
 
     pub(crate) fn name(&self) -> &str {
