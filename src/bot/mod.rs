@@ -1,5 +1,6 @@
 mod implementation;
 mod load_config;
+mod locale;
 mod messaging;
 mod reacting;
 mod rooms;

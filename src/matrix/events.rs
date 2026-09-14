@@ -9,10 +9,16 @@
 //! - `cc.chums.x402_topup_confirmed`: a payment settled and the room balance was updated. The client
 //!   renders a success bubble.
 //!
+//! One event goes the other way, from the client to the bot:
+//!
+//! - `cc.chums.set_user_locale`: the user's client declares the language of the bot's replies to
+//!   that user. See `src/i18n`.
+//!
 //! The wire format is plain JSON. The event type strings and field names are a contract with the
 //! client; the tests in this module lock the wire shape, and any change needs a coordinated client
 //! release. See `docs/matrix-events.md`.
 
+use mxlink::matrix_sdk::ruma::events::macros::EventContent;
 use mxlink::matrix_sdk::{self, Room, ruma::OwnedEventId};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -20,6 +26,7 @@ use uuid::Uuid;
 pub const EVENT_TYPE_X402_REQUEST: &str = "cc.chums.x402_request";
 pub const EVENT_TYPE_CAP_HIT: &str = "cc.chums.cap_hit";
 pub const EVENT_TYPE_X402_TOPUP_CONFIRMED: &str = "cc.chums.x402_topup_confirmed";
+pub const EVENT_TYPE_SET_USER_LOCALE: &str = "cc.chums.set_user_locale";
 
 /// USD amounts on the Matrix wire are decimal **strings** (`"1.000000"`), never JSON numbers.
 ///
@@ -152,6 +159,20 @@ pub struct X402TopupConfirmedContent {
     pub new_balance_usd: f64,
     /// Matrix user id of who paid (in a DM the user; in a group whichever member paid).
     pub credited_to_user: String,
+}
+
+/// Body of `cc.chums.set_user_locale`, sent by a user's client into a room shared with the bot
+/// when the user picks a language. The bot then replies to that user in this locale (see
+/// `src/i18n`). The sender of the event is the user whose locale it is.
+///
+/// The `EventContent` derive makes matrix-sdk deliver sync events of this type to
+/// `OriginalSyncMessageLikeEvent<SetUserLocaleContent>` handlers; the bot registers one in
+/// `Bot::start`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EventContent)]
+#[ruma_event(type = "cc.chums.set_user_locale", kind = MessageLike)]
+pub struct SetUserLocaleContent {
+    /// A BCP 47 language tag, usually just the language (`"en"`, `"ru"`, `"de"`).
+    pub locale: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -400,5 +421,22 @@ mod tests {
             EVENT_TYPE_X402_TOPUP_CONFIRMED,
             "cc.chums.x402_topup_confirmed"
         );
+        assert_eq!(EVENT_TYPE_SET_USER_LOCALE, "cc.chums.set_user_locale");
+    }
+
+    /// The inbound event: what the client sends when the user picks a language.
+    #[test]
+    fn set_user_locale_parses_the_client_event() {
+        use mxlink::matrix_sdk::ruma::events::MessageLikeEventContent as _;
+
+        let content: SetUserLocaleContent =
+            serde_json::from_value(json!({ "locale": "ru" })).unwrap();
+        assert_eq!(content.locale, "ru");
+        assert_eq!(content.event_type().to_string(), EVENT_TYPE_SET_USER_LOCALE);
+
+        // Unknown fields are tolerated, so the client may extend the event.
+        let extended: SetUserLocaleContent =
+            serde_json::from_value(json!({ "locale": "de", "source": "settings" })).unwrap();
+        assert_eq!(extended.locale, "de");
     }
 }

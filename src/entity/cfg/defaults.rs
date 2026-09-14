@@ -24,6 +24,10 @@ pub(super) fn room_post_join_self_introduction_enabled() -> bool {
     true
 }
 
+pub(super) fn i18n_fallback_locale() -> String {
+    crate::i18n::DEFAULT_LOCALE.to_owned()
+}
+
 pub(super) fn persistence_data_dir_path() -> Option<String> {
     None
 }

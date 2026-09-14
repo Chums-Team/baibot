@@ -73,6 +73,8 @@ Available to the users listed in `billing.admin_mxids` only:
 
 The reason is mandatory and must be enclosed in double quotes.
 
+The replies to everyone (`balance`, `topup`, the summary, the messages about a low balance or a reached cap) are sent in the user's language, see [🌍 Localization](./i18n.md). The administration commands answer in English.
+
 
 ### What happens around a call
 

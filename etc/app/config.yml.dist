@@ -51,6 +51,12 @@ room:
   # Whether the bot should send an introduction message after joining a room.
   post_join_self_introduction_enabled: true
 
+i18n:
+  # Language of the replies to users whose client has not declared one with a
+  # `cc.chums.set_user_locale` event. One of the locales under locales/.
+  # See docs/configuration/i18n.md.
+  fallback_locale: en
+
 access:
   # Space-separated list of MXID patterns which specify who is an admin.
   admin_patterns:

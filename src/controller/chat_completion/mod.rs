@@ -742,10 +742,11 @@ async fn handle_stage_text_generation(
                 tracing::warn!(error = %err, "Billing: failed to send the cap-hit event");
             }
 
+            let locale = bot.resolve_user_locale(message_context.sender_id()).await;
             bot.messaging()
                 .send_text_markdown_no_fail(
                     message_context.room(),
-                    strings::billing::cap_hit(period.as_str(), cap_usd, &resumes_at),
+                    strings::billing::cap_hit(&locale, period, cap_usd, &resumes_at),
                     response_type,
                 )
                 .await;
@@ -755,10 +756,11 @@ async fn handle_stage_text_generation(
         billing_glue::BilledCallOutcome::PreCheckError(error) => {
             tracing::error!(error, "Billing: pre-check failed; declining LLM call");
 
+            let locale = bot.resolve_user_locale(message_context.sender_id()).await;
             bot.messaging()
                 .send_error_markdown_no_fail(
                     message_context.room(),
-                    strings::billing::temporarily_unavailable(),
+                    &strings::billing::temporarily_unavailable(&locale),
                     response_type,
                 )
                 .await;
@@ -1090,12 +1092,18 @@ async fn announce_insufficient_balance(
     reserve_amount_usd: f64,
     response_type: MessageResponseType,
 ) {
+    let locale = bot.resolve_user_locale(message_context.sender_id()).await;
+
     let (Some(x402_client), Some(billing_config)) = (bot.x402_client(), bot.billing_config())
     else {
         bot.messaging()
             .send_text_markdown_no_fail(
                 message_context.room(),
-                strings::billing::insufficient_balance(current_balance_usd, reserve_amount_usd),
+                strings::billing::insufficient_balance(
+                    &locale,
+                    current_balance_usd,
+                    reserve_amount_usd,
+                ),
                 response_type,
             )
             .await;
@@ -1131,9 +1139,14 @@ async fn announce_insufficient_balance(
     };
 
     let text = if widget_sent {
-        strings::billing::insufficient_balance_with_widget(current_balance_usd, reserve_amount_usd)
+        strings::billing::insufficient_balance_with_widget(
+            &locale,
+            current_balance_usd,
+            reserve_amount_usd,
+        )
     } else {
         strings::billing::insufficient_balance_with_topup_command(
+            &locale,
             current_balance_usd,
             reserve_amount_usd,
             bot.command_prefix(),

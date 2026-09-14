@@ -26,6 +26,8 @@ For Matrix-account authentication setup, see [🔐 Authentication](./authenticat
 
 For the optional accounting of LLM calls, see [💰 Billing](./billing.md), and for paying into a room balance, [💸 x402 top-ups](./x402.md).
 
+For the language of the bot's replies to users of the Chums client, see [🌍 Localization](./i18n.md).
+
 
 ### Dynamic configuration
 

@@ -26,9 +26,10 @@ use crate::billing::{BillingContext, BillingService};
 use crate::entity::catch_up_marker::{
     CatchUpMarker, CatchUpMarkerManager, DelayedCatchUpMarkerManager,
 };
-use crate::entity::cfg::{Avatar, Config, ConfigBilling, ConfigUserAuth, ConfigX402};
+use crate::entity::cfg::{Avatar, Config, ConfigBilling, ConfigI18n, ConfigUserAuth, ConfigX402};
 use crate::entity::globalconfig::{GlobalConfig, GlobalConfigurationManager};
 use crate::entity::roomconfig::{RoomConfig, RoomConfigurationManager};
+use crate::i18n::UserLocaleManager;
 use crate::x402::X402Client;
 
 use crate::agent::Manager;
@@ -70,6 +71,9 @@ struct BotInner {
 
     /// Present only when the `x402` configuration section is set.
     x402_client: Option<X402Client>,
+
+    /// The locales users' clients declared, for localized replies.
+    user_locale_manager: UserLocaleManager,
 }
 
 /// Bot represents a bot instance.
@@ -140,6 +144,7 @@ impl Bot {
                 admin_pattern_regexes,
                 billing,
                 x402_client,
+                user_locale_manager: UserLocaleManager::new(),
             }),
         })
     }
@@ -162,6 +167,16 @@ impl Bot {
     /// The `x402` configuration section, when present.
     pub(crate) fn x402_config(&self) -> Option<&ConfigX402> {
         self.inner.config.x402.as_ref()
+    }
+
+    /// The `i18n` configuration section.
+    pub(crate) fn i18n_config(&self) -> &ConfigI18n {
+        &self.inner.config.i18n
+    }
+
+    /// The locales users' clients declared with `cc.chums.set_user_locale`.
+    pub(crate) fn user_locale_manager(&self) -> &UserLocaleManager {
+        &self.inner.user_locale_manager
     }
 
     pub(crate) fn admin_patterns(&self) -> &Vec<String> {
@@ -284,6 +299,7 @@ impl Bot {
         self.rooms().attach_event_handlers().await;
         self.messaging().attach_event_handlers().await;
         self.reacting().attach_event_handlers().await;
+        self.attach_user_locale_event_handler();
 
         self.inner.delayed_catch_up_marker_manager.start().await;
 

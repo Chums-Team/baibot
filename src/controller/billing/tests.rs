@@ -9,11 +9,12 @@ use crate::billing::{BillingService, Period};
 const ROOM: &str = "!r:example.com";
 const ADMIN: &str = "@admin:example.com";
 const PREFIX: &str = "!bai";
+const EN: &str = "en";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn balance_zero() {
     let svc = BillingService::open_in_memory().unwrap();
-    let out = balance(&svc, ROOM, 5).await.unwrap();
+    let out = balance(EN, &svc, ROOM, 5).await.unwrap();
     assert!(out.contains("$0.00"), "{out}");
     assert!(!out.contains("Recent transactions"), "{out}");
 }
@@ -24,10 +25,23 @@ async fn balance_with_recent() {
     svc.topup(ROOM, 5.0, Some("@u:example.com"), json!({}))
         .await
         .unwrap();
-    let out = balance(&svc, ROOM, 3).await.unwrap();
+    let out = balance(EN, &svc, ROOM, 3).await.unwrap();
     assert!(out.contains("$5.00"), "{out}");
     assert!(out.contains("Recent transactions"), "{out}");
     assert!(out.contains("| topup |"), "{out}");
+    assert!(out.contains("+$5.0000"), "{out}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn balance_is_localized_but_keeps_the_figures() {
+    let svc = BillingService::open_in_memory().unwrap();
+    svc.topup(ROOM, 5.0, Some("@u:example.com"), json!({}))
+        .await
+        .unwrap();
+    let out = balance("ru", &svc, ROOM, 3).await.unwrap();
+    assert!(out.contains("**Баланс:** $5.00"), "{out}");
+    assert!(out.contains("Последние транзакции"), "{out}");
+    assert!(out.contains("| пополнение |"), "{out}");
     assert!(out.contains("+$5.0000"), "{out}");
 }
 
@@ -94,8 +108,8 @@ async fn manual_refund_inserts_credit() {
 
 #[test]
 fn help_includes_admin_section_only_for_admin() {
-    let user = help(PREFIX, false, false);
-    let admin = help(PREFIX, true, false);
+    let user = help(EN, PREFIX, false, false);
+    let admin = help(EN, PREFIX, true, false);
     assert!(user.contains("`!bai balance`"), "{user}");
     assert!(!user.contains("Administration commands"), "{user}");
     assert!(admin.contains("Administration commands"), "{admin}");
@@ -107,15 +121,26 @@ fn help_includes_admin_section_only_for_admin() {
 
 #[test]
 fn help_lists_topup_only_when_x402_is_configured() {
-    let without = help(PREFIX, false, false);
-    let with = help(PREFIX, false, true);
+    let without = help(EN, PREFIX, false, false);
+    let with = help(EN, PREFIX, false, true);
     assert!(!without.contains("topup"), "{without}");
     assert!(with.contains("`!bai topup [<amount_usd>]`"), "{with}");
 }
 
 #[test]
+fn help_user_part_is_localized_and_admin_part_is_english() {
+    let admin = help("de", PREFIX, true, true);
+    assert!(
+        admin.contains("`!bai balance` — Agenten-Guthaben"),
+        "{admin}"
+    );
+    assert!(admin.contains("`!bai topup [<amount_usd>]`"), "{admin}");
+    assert!(admin.contains("Administration commands"), "{admin}");
+}
+
+#[test]
 fn topup_invoice_text_has_amount() {
-    let out = topup_invoice(0.10);
+    let out = topup_invoice(EN, 0.10);
     assert!(out.contains("$0.10"), "{out}");
     assert!(out.contains("widget"), "{out}");
 }

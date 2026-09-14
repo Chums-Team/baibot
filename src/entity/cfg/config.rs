@@ -23,6 +23,10 @@ pub struct Config {
     #[serde(default)]
     pub room: ConfigRoom,
 
+    /// Localization of the bot's replies. Optional: defaults apply without the section.
+    #[serde(default)]
+    pub i18n: super::i18n::ConfigI18n,
+
     pub access: ConfigAccess,
 
     pub agents: ConfigAgents,
@@ -51,6 +55,7 @@ impl Config {
         self.user.validate(&self.homeserver.server_name)?;
         self.persistence.validate()?;
         self.room.validate()?;
+        self.i18n.validate()?;
         self.access.validate()?;
 
         if self.command_prefix.is_empty() {

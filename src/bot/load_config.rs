@@ -54,6 +54,9 @@ pub fn load() -> anyhow::Result<Config> {
             cfg_env::BAIBOT_ROOM_POST_JOIN_SELF_INTRODUCTION_ENABLED => {
                 config.room.post_join_self_introduction_enabled = value.parse::<bool>()?;
             }
+            cfg_env::BAIBOT_I18N_FALLBACK_LOCALE => {
+                config.i18n.fallback_locale = value;
+            }
             cfg_env::BAIBOT_LOGGING => {
                 config.logging = value;
             }

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use mxlink::MessageResponseType;
-use mxlink::matrix_sdk::ruma::RoomId;
+use mxlink::matrix_sdk::ruma::{RoomId, UserId};
 
 use crate::matrix::events::{X402TopupConfirmedContent, emit_x402_topup_confirmed};
 use crate::strings;
@@ -87,7 +87,20 @@ impl Bot {
                 );
             }
 
+            // The confirmation is addressed to whoever paid, so it is in their locale.
+            let locale = match UserId::parse(&announcement.credited_to_user) {
+                Ok(user_id) => self.resolve_user_locale(&user_id).await,
+                Err(e) => {
+                    tracing::warn!(
+                        credited_to_user = %announcement.credited_to_user,
+                        error = %e,
+                        "topup announcement: credited_to_user is not a user id; using the fallback locale",
+                    );
+                    self.i18n_config().fallback_locale.clone()
+                }
+            };
             let text = strings::billing::topup_confirmed(
+                &locale,
                 announcement.amount_usd,
                 announcement.new_balance_usd,
                 &short_tx_hash(&announcement.tx_hash),

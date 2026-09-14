@@ -2,6 +2,8 @@
 
 When [billing](./configuration/billing.md) is enabled, the bot talks to the Chums client through custom Matrix events under the `cc.chums.*` namespace. They are plain message-like events (not state events). The Chums client registers a handler per event `type` and renders a widget instead of a text bubble; other clients ignore the events and only see the plain text message the bot sends alongside.
 
+One event goes the other way: the client sends [`cc.chums.set_user_locale`](#ccchumsset_user_locale-client--bot) to tell the bot the user's language.
+
 The Rust source of truth is [`src/matrix/events.rs`](../src/matrix/events.rs). The tests in that file lock the wire shape: the event type strings and field names are a contract with the client, and any change needs a coordinated client release.
 
 ### USD amounts are strings
@@ -74,8 +76,23 @@ A payment settled on-chain and was credited to the room.
 
 The bot also sends a plain text confirmation for clients that do not recognize the event.
 
+### `cc.chums.set_user_locale` (client → bot)
+
+Sent by the user's client into any room shared with the bot when the user picks a language, and again on start-up (the bot does not persist it). The sender of the event is the user whose locale it is; the bot replies to that user in this language from then on. See [🌍 Localization](./configuration/i18n.md).
+
+```json
+{
+  "type": "cc.chums.set_user_locale",
+  "content": {
+    "locale": "ru"
+  }
+}
+```
+
+`locale` is a BCP 47 language tag, usually just the language. A regional variant maps onto its language (`pt-BR` → `pt`); a language the bot has no translations for is ignored. The bot does not acknowledge the event.
+
 ### Implementation notes
 
-- Events are sent with `Room::send_raw(event_type, content)`. Encrypted rooms work transparently: matrix-sdk encrypts the content regardless of the event type.
+- Outbound events are sent with `Room::send_raw(event_type, content)`. Encrypted rooms work transparently: matrix-sdk encrypts the content regardless of the event type. The inbound event is a typed `EventContent` and arrives through a matrix-sdk event handler.
 - The bot does not expect the client to acknowledge an event. Idempotency is decided by the ledger: a `topup` row is written at most once per `payment_id`.
 - New events should also live under `cc.chums.*`, be defined in `src/matrix/events.rs`, and get the same shape-locking tests.

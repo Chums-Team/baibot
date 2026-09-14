@@ -79,26 +79,38 @@ async fn run(
     let sender_id = message_context.sender_id();
     let is_admin = BillingCommandAccess::determine(Some(billing_config), sender_id).is_admin();
     let topup_available = bot.x402_client().is_some();
+    let locale = bot.resolve_user_locale(sender_id).await;
+    let locale = locale.as_str();
 
     match controller_type {
         BillingControllerType::Help => Reply::Text(handlers::help(
+            locale,
             bot.command_prefix(),
             is_admin,
             topup_available,
         )),
 
-        BillingControllerType::Balance => {
-            handlers::balance(&billing.service, message_context.room_id().as_str(), 5)
-                .await
-                .map_or_else(
-                    |e| Reply::Error(strings::billing::command_failed("balance", &e.to_string())),
-                    Reply::Text,
-                )
-        }
+        BillingControllerType::Balance => handlers::balance(
+            locale,
+            &billing.service,
+            message_context.room_id().as_str(),
+            5,
+        )
+        .await
+        .map_or_else(
+            |e| {
+                Reply::Error(strings::billing::command_failed(
+                    locale,
+                    "balance",
+                    &e.to_string(),
+                ))
+            },
+            Reply::Text,
+        ),
 
         BillingControllerType::Topup { amount_usd } => {
             let Some(x402_client) = bot.x402_client() else {
-                return Reply::Error(strings::billing::topup_not_configured().to_owned());
+                return Reply::Error(strings::billing::topup_not_configured(locale));
             };
 
             let amount_usd = amount_usd.unwrap_or(billing_config.min_topup_usd);
@@ -106,6 +118,7 @@ async fn run(
                 || amount_usd > billing_config.max_topup_usd
             {
                 return Reply::Error(strings::billing::topup_amount_out_of_range(
+                    locale,
                     billing_config.min_topup_usd,
                     billing_config.max_topup_usd,
                 ));
@@ -122,12 +135,15 @@ async fn run(
                 .await
             {
                 Ok(content) => Reply::X402Request {
-                    text: handlers::topup_invoice(amount_usd),
+                    text: handlers::topup_invoice(locale, amount_usd),
                     content: Box::new(content),
                 },
                 Err(e) => {
                     tracing::warn!(error = %e, "The payment sidecar refused a topup request");
-                    Reply::Error(strings::billing::topup_request_failed(&e.to_string()))
+                    Reply::Error(strings::billing::topup_request_failed(
+                        locale,
+                        &e.to_string(),
+                    ))
                 }
             }
         }
@@ -141,6 +157,7 @@ async fn run(
         .map_or_else(
             |e| {
                 Reply::Error(strings::billing::command_failed(
+                    locale,
                     "stats day",
                     &e.to_string(),
                 ))
@@ -157,6 +174,7 @@ async fn run(
         .map_or_else(
             |e| {
                 Reply::Error(strings::billing::command_failed(
+                    locale,
                     "stats month",
                     &e.to_string(),
                 ))
@@ -170,6 +188,7 @@ async fn run(
                 .map_or_else(
                     |e| {
                         Reply::Error(strings::billing::command_failed(
+                            locale,
                             "billing zombies",
                             &e.to_string(),
                         ))
@@ -191,6 +210,7 @@ async fn run(
         .map_or_else(
             |e| {
                 Reply::Error(strings::billing::command_failed(
+                    locale,
                     "billing manual-release",
                     &e.to_string(),
                 ))
@@ -213,6 +233,7 @@ async fn run(
         .map_or_else(
             |e| {
                 Reply::Error(strings::billing::command_failed(
+                    locale,
                     "billing manual-refund",
                     &e.to_string(),
                 ))
@@ -221,13 +242,13 @@ async fn run(
         ),
 
         BillingControllerType::AccessDenied { command } => {
-            Reply::Error(strings::billing::access_denied(command))
+            Reply::Error(strings::billing::access_denied(locale, command))
         }
 
         BillingControllerType::ParseError { command, reason } => Reply::Error(format!(
             "{}\n\n{}",
-            strings::billing::invalid_command(command, reason),
-            handlers::help(bot.command_prefix(), is_admin, topup_available),
+            strings::billing::invalid_command(locale, command, reason),
+            handlers::help(locale, bot.command_prefix(), is_admin, topup_available),
         )),
     }
 }

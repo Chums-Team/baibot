@@ -1,33 +1,52 @@
 //! Pure handlers for the billing chat commands. Each returns the markdown the bot sends to
 //! the room. The only side effects are the explicit ledger writes of the `manual-*` commands.
+//!
+//! The replies to everyone (`balance`, `topup`, the user part of `help`) are localized and take
+//! the user's `locale` (see `crate::i18n`). The administration commands answer in English.
 
+use rust_i18n::t;
 use uuid::Uuid;
 
+use crate::billing::types::BillingEventType;
 use crate::billing::{BillingError, BillingService, Period};
 
 // ===== `balance` =====
 
 pub async fn balance(
+    locale: &str,
     billing: &BillingService,
     room_id: &str,
     show_recent: usize,
 ) -> Result<String, BillingError> {
     let balance = billing.compute_balance(room_id).await?;
 
-    let mut out = format!("**Balance:** ${balance:.2}\n");
+    let mut out = t!(
+        "billing.balance.header",
+        locale = locale,
+        balance = format!("{balance:.2}")
+    )
+    .into_owned();
+    out.push('\n');
 
     if show_recent > 0 {
         let events = billing.recent_events(room_id, show_recent).await?;
         if !events.is_empty() {
-            out.push_str("\n**Recent transactions:**\n\n");
-            out.push_str("| When (UTC) | Type | Amount |\n");
+            out.push('\n');
+            out.push_str(&t!("billing.balance.recent_transactions", locale = locale));
+            out.push_str("\n\n");
+            out.push_str(&format!(
+                "| {} | {} | {} |\n",
+                t!("billing.balance.column_when", locale = locale),
+                t!("billing.balance.column_type", locale = locale),
+                t!("billing.balance.column_amount", locale = locale),
+            ));
             out.push_str("|---|---|---|\n");
             for event in events {
                 let sign = if event.amount_usd >= 0.0 { "+" } else { "" };
                 out.push_str(&format!(
                     "| {} | {} | {sign}${:.4} |\n",
                     event.created_at.format("%Y-%m-%d %H:%M"),
-                    event.event_type.as_str(),
+                    event_type_label(locale, event.event_type),
                     event.amount_usd,
                 ));
             }
@@ -35,6 +54,17 @@ pub async fn balance(
     }
 
     Ok(out)
+}
+
+fn event_type_label(locale: &str, event_type: BillingEventType) -> String {
+    match event_type {
+        BillingEventType::Topup => t!("billing.event_type.topup", locale = locale),
+        BillingEventType::Reserve => t!("billing.event_type.reserve", locale = locale),
+        BillingEventType::Charge => t!("billing.event_type.charge", locale = locale),
+        BillingEventType::Release => t!("billing.event_type.release", locale = locale),
+        BillingEventType::RefundManual => t!("billing.event_type.refund_manual", locale = locale),
+    }
+    .into_owned()
 }
 
 // ===== `stats day` / `stats month` (administrators) =====
@@ -145,26 +175,35 @@ pub async fn manual_refund(
 
 /// The text sent together with a `cc.chums.x402_request` event, for clients that do not
 /// render the payment widget.
-pub fn topup_invoice(amount_required_usd: f64) -> String {
-    format!(
-        "To top up the agent's balance in this room, pay **${amount_required_usd:.2}** in USDT (TRC-20) through the payment widget. \
-         If no widget appears, your client does not support x402 payments yet; use the Chums web client."
+pub fn topup_invoice(locale: &str, amount_required_usd: f64) -> String {
+    t!(
+        "billing.topup_invoice",
+        locale = locale,
+        amount = format!("{amount_required_usd:.2}")
     )
+    .into_owned()
 }
 
 // ===== `billing help` =====
 
 /// `topup_available` is whether the `x402` section is configured; the `topup` command is
 /// listed only then.
-pub fn help(command_prefix: &str, is_admin: bool, topup_available: bool) -> String {
-    let mut out = format!(
-        "- `{command_prefix} balance` — show the agent's balance in this room and recent transactions.\n"
-    );
+pub fn help(locale: &str, command_prefix: &str, is_admin: bool, topup_available: bool) -> String {
+    let mut out = t!(
+        "billing.help.balance",
+        locale = locale,
+        prefix = command_prefix
+    )
+    .into_owned();
+    out.push('\n');
 
     if topup_available {
-        out.push_str(&format!(
-            "- `{command_prefix} topup [<amount_usd>]` — top up the balance of this room with a USDT (TRC-20) payment.\n"
+        out.push_str(&t!(
+            "billing.help.topup",
+            locale = locale,
+            prefix = command_prefix
         ));
+        out.push('\n');
     }
 
     if is_admin {
