@@ -1,6 +1,6 @@
 # The bot next to the x402 payment sidecar (x402-sidecar/docker-compose.yml).
 #
-# The two compose projects meet on the external Docker network `himari-shared`:
+# The two compose projects meet on the external Docker network `chums-shared`:
 # the bot reaches the sidecar at http://x402-sidecar:8402 and the sidecar posts
 # settlement notifications to http://bot:9000/internal/x402-settled. The `x402`
 # section of config.yml must therefore bind on all interfaces of the container:
@@ -12,7 +12,7 @@
 #
 # Before the first `docker compose up`:
 #
-#   docker network create himari-shared
+#   docker network create chums-shared
 #   cp .env.example .env                  # secrets and per-host settings
 #   cp etc/app/config.yml.dist config.yml # and edit it
 #   mkdir data
@@ -32,7 +32,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: himari-bot
+    container_name: chums-bot
     restart: unless-stopped
     # Must own ./data. Set UID and GID in .env.
     user: "${UID:-1000}:${GID:-1000}"
@@ -59,8 +59,8 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=1024m
     networks:
-      - himari-shared
+      - chums-shared
 
 networks:
-  himari-shared:
+  chums-shared:
     external: true

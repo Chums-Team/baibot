@@ -1,4 +1,4 @@
-# himari-x402-sidecar
+# x402-sidecar
 
 Thin Python (FastAPI) sidecar that bridges the Rust bot (this repository,
 `chums` branch) and the Flutter Chums client to an **x402 v2 facilitator**
@@ -69,7 +69,7 @@ curl -s http://localhost:8402/health | jq
 cd x402-sidecar
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-uvicorn himari_x402_sidecar.app:app --reload --port 8402
+uvicorn x402_sidecar.app:app --reload --port 8402
 ```
 
 ## Tests
@@ -109,7 +109,7 @@ every payment request in this mode, and `/health` reports
 ## Layout
 
 ```
-src/himari_x402_sidecar/
+src/x402_sidecar/
 ├── app.py                 # FastAPI factory, endpoints, bot notify
 ├── config.py              # Pydantic Settings (env / .env)
 ├── facilitator_client.py  # /health /supported /verify /settle (httpx)

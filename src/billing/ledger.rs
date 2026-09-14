@@ -315,9 +315,9 @@ impl BillingService {
         let room_id = room_id.to_owned();
         let user_mxid = user_mxid.map(str::to_owned);
         // Pull the payment_id out of meta so we can re-emit it
-        // verbatim if the partial UNIQUE index in
-        // `002_payment_id_unique.sql` rejects the INSERT — converts a
-        // raw SQLITE_CONSTRAINT_UNIQUE into the typed
+        // verbatim if the partial UNIQUE index
+        // `idx_billing_topup_payment_id` (see `schema.sql`) rejects the
+        // INSERT — converts a raw SQLITE_CONSTRAINT_UNIQUE into the typed
         // BillingError::DuplicatePaymentId the webhook handler expects.
         let payment_id_for_err = meta
             .get("payment_id")

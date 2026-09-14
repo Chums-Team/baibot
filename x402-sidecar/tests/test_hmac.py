@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from himari_x402_sidecar import auth
+from x402_sidecar import auth
 
 
 def test_sign_is_deterministic():

@@ -27,7 +27,7 @@ The Chums client must accept USD amounts as strings in the events (all current r
 Once per host:
 
 ```sh
-docker network create himari-shared
+docker network create chums-shared
 ```
 
 

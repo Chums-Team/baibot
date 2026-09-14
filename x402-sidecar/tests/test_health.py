@@ -20,8 +20,8 @@ def app_with_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("X402_FACILITATOR_WEBHOOK_SECRET", "test-fac-secret-cccccccccccccccccc")
     monkeypatch.setenv("X402_AGENT_WALLET", "TSkeaPMSuaojcCzE7mWqw4xN1awU7NfdfY")
     # Reload config + app modules so Settings picks up monkeypatched env.
-    from himari_x402_sidecar import config as config_mod
-    from himari_x402_sidecar import app as app_mod
+    from x402_sidecar import config as config_mod
+    from x402_sidecar import app as app_mod
     importlib.reload(config_mod)
     importlib.reload(app_mod)
     config_mod._settings = None  # reset singleton
@@ -59,7 +59,7 @@ def test_missing_required_env_fails_fast(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("X402_INTERNAL_SECRET", raising=False)
     monkeypatch.delenv("X402_FACILITATOR_WEBHOOK_SECRET", raising=False)
     monkeypatch.delenv("X402_AGENT_WALLET", raising=False)
-    from himari_x402_sidecar import config as config_mod
+    from x402_sidecar import config as config_mod
     importlib.reload(config_mod)
     config_mod._settings = None
     with pytest.raises(Exception):  # Pydantic ValidationError

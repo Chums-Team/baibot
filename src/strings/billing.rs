@@ -2,7 +2,7 @@
 //!
 //! Every function takes the locale of the addressed user (see `crate::i18n`) and renders a key
 //! from `locales/<locale>.yml`. Amounts are formatted here, so every locale shows the same
-//! figures: balances with 4 decimals, thresholds and top-up amounts with 2.
+//! figures: balances and credited top-ups with 4 decimals, thresholds and limits with 2.
 
 use rust_i18n::t;
 
@@ -188,5 +188,40 @@ mod tests {
     #[test]
     fn unknown_locale_gets_english() {
         assert_eq!(topup_not_configured("xx"), topup_not_configured("en"));
+    }
+
+    /// rust-i18n does not fail on a placeholder without a matching argument: it leaves `%{name}`
+    /// in the text. Render every reply in every locale and make sure nothing is left unfilled.
+    #[test]
+    fn every_reply_fills_all_placeholders_in_every_locale() {
+        for locale in crate::i18n::available_locales() {
+            let replies = [
+                temporarily_unavailable(&locale),
+                insufficient_balance(&locale, 0.0123, 0.03),
+                insufficient_balance_with_widget(&locale, 0.0123, 0.03),
+                insufficient_balance_with_topup_command(&locale, 0.0123, 0.03, "!bai", 0.1),
+                cap_hit(&locale, CapPeriod::Daily, 50.0, "2026-05-03T00:00:00+00:00"),
+                cap_hit(
+                    &locale,
+                    CapPeriod::Monthly,
+                    1000.0,
+                    "2026-06-01T00:00:00+00:00",
+                ),
+                topup_confirmed(&locale, 1.0, 1.0123, "abcdef12…3456"),
+                topup_not_configured(&locale),
+                topup_amount_out_of_range(&locale, 0.1, 1.0),
+                topup_request_failed(&locale, "connection refused"),
+                access_denied(&locale, "stats day"),
+                invalid_command(&locale, "topup", "not a number"),
+                command_failed(&locale, "balance", "ledger closed"),
+            ];
+            for reply in replies {
+                assert!(
+                    !reply.contains("%{"),
+                    "{locale}: unfilled placeholder in {reply:?}"
+                );
+                assert!(!reply.trim().is_empty(), "{locale}: empty reply");
+            }
+        }
     }
 }

@@ -23,7 +23,7 @@ def required_env(monkeypatch):
 
 
 def _fresh_settings():
-    from himari_x402_sidecar import config as config_mod
+    from x402_sidecar import config as config_mod
 
     importlib.reload(config_mod)
     config_mod._settings = None
@@ -31,7 +31,7 @@ def _fresh_settings():
 
 
 def _build(settings):
-    from himari_x402_sidecar.facilitator_client import FacilitatorClient
+    from x402_sidecar.facilitator_client import FacilitatorClient
 
     return FacilitatorClient(settings).build_payment_request(
         amount_usd=0.10, room_id="!stub:test", payment_id=uuid4()

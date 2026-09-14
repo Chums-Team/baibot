@@ -37,8 +37,8 @@ def _env(monkeypatch, *, stub: bool):
     monkeypatch.setenv("BOT_X402_NOTIFY_URL", "http://bot.test/internal/x402-settled")
     monkeypatch.setenv("X402_FACILITATOR_USE_STUB", "true" if stub else "false")
     monkeypatch.setenv("X402_NETWORK", "tron:0xcd8690dc")
-    from himari_x402_sidecar import app as app_mod
-    from himari_x402_sidecar import config as config_mod
+    from x402_sidecar import app as app_mod
+    from x402_sidecar import config as config_mod
 
     importlib.reload(config_mod)
     importlib.reload(app_mod)
@@ -59,7 +59,7 @@ def live_app(monkeypatch):
 def _swap_facilitator_transport(app, handler):
     import asyncio
 
-    from himari_x402_sidecar.facilitator_client import USER_AGENT
+    from x402_sidecar.facilitator_client import USER_AGENT
 
     fac = app.state.facilitator
     asyncio.run(fac._client.aclose())
@@ -81,7 +81,7 @@ def _swap_notify_transport(app, captured: list, status_code: int = 200):
 def _create_payment(client, amount_usd: float = 0.10) -> dict:
     r = client.post(
         "/payment-request",
-        json={"room_id": "!abc:tron.mx", "user_mxid": "@user:tron.mx", "amount_usd": amount_usd},
+        json={"room_id": "!abc:example.com", "user_mxid": "@user:example.com", "amount_usd": amount_usd},
     )
     assert r.status_code == 200, r.text
     return r.json()
@@ -131,7 +131,7 @@ def test_submit_rejects_unknown_payment_id(app):
 
 
 def test_submit_idempotent_on_already_settled(app):
-    from himari_x402_sidecar import db
+    from x402_sidecar import db
 
     with TestClient(app) as client:
         created = _create_payment(client)
@@ -145,7 +145,7 @@ def test_submit_idempotent_on_already_settled(app):
 
 
 def test_submit_rejects_expired_payment(app):
-    from himari_x402_sidecar import db
+    from x402_sidecar import db
 
     with TestClient(app) as client:
         created = _create_payment(client)
@@ -202,7 +202,7 @@ def test_submit_redacts_buyer_in_logs(app, caplog):
 
     with TestClient(app) as client:
         created = _create_payment(client)
-        with caplog.at_level(logging.INFO, logger="himari_x402_sidecar.app"):
+        with caplog.at_level(logging.INFO, logger="x402_sidecar.app"):
             r = _submit(client, created["payment_id"])
         assert r.status_code == 200
         assert not any(BUYER_B58 in rec.message for rec in caplog.records)
@@ -213,7 +213,7 @@ def test_submit_redacts_buyer_in_logs(app, caplog):
 
 
 def test_live_happy_path_verify_settle_notify(live_app):
-    from himari_x402_sidecar import db
+    from x402_sidecar import db
 
     fac_calls: list = []
     notifies: list = []
@@ -273,7 +273,7 @@ def test_live_submit_without_envelope_is_fine(live_app):
 
 
 def test_live_verify_failed_returns_402_and_keeps_pending(live_app):
-    from himari_x402_sidecar import db
+    from x402_sidecar import db
 
     fac_calls: list = []
     with TestClient(live_app) as client:
@@ -313,7 +313,7 @@ def test_live_verify_failed_returns_402_and_keeps_pending(live_app):
 
 
 def test_live_settle_failed_returns_402_and_keeps_pending(live_app):
-    from himari_x402_sidecar import db
+    from x402_sidecar import db
 
     notifies: list = []
     with TestClient(live_app) as client:
@@ -363,7 +363,7 @@ def test_live_facilitator_transport_error_returns_502(live_app, path):
 def test_live_success_with_empty_tx_hash_marks_settled_and_warns(live_app, caplog):
     import logging
 
-    from himari_x402_sidecar import db
+    from x402_sidecar import db
 
     with TestClient(live_app) as client:
         _swap_facilitator_transport(
@@ -371,7 +371,7 @@ def test_live_success_with_empty_tx_hash_marks_settled_and_warns(live_app, caplo
         )
         _swap_notify_transport(live_app, [])
         created = _create_payment(client)
-        with caplog.at_level(logging.WARNING, logger="himari_x402_sidecar.app"):
+        with caplog.at_level(logging.WARNING, logger="x402_sidecar.app"):
             r = _submit(client, created["payment_id"])
         assert r.status_code == 200
         assert r.json()["next_step"] == "settled"
@@ -388,7 +388,7 @@ def test_live_bot_notify_failure_does_not_fail_submit(live_app, caplog):
         _swap_facilitator_transport(live_app, _facilitator())
         _swap_notify_transport(live_app, [], status_code=500)
         created = _create_payment(client)
-        with caplog.at_level(logging.ERROR, logger="himari_x402_sidecar.app"):
+        with caplog.at_level(logging.ERROR, logger="x402_sidecar.app"):
             r = _submit(client, created["payment_id"])
         assert r.status_code == 200
         assert r.json()["next_step"] == "settled"

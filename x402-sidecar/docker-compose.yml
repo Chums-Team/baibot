@@ -1,16 +1,16 @@
 # Sidecar compose. Pairs with the bot's docker-compose.yml (repository
-# root) on the external network `himari-shared` so the bot can POST to
+# root) on the external network `chums-shared` so the bot can POST to
 # the sidecar at `http://x402-sidecar:8402` and the sidecar can POST
 # settlement notifications to `http://bot:9000/internal/x402-settled`.
 #
-# Create the network once:  docker network create himari-shared
+# Create the network once:  docker network create chums-shared
 services:
   x402-sidecar:
     build:
       context: .
       dockerfile: Dockerfile
-    image: himari-x402-sidecar:0.2.0
-    container_name: himari-x402-sidecar
+    image: chums-x402-sidecar:0.2.0
+    container_name: chums-x402-sidecar
     restart: unless-stopped
     env_file:
       - .env
@@ -23,8 +23,8 @@ services:
       # Persist sidecar SQLite (payment-id ↔ context mapping).
       - ./data:/app/data
     networks:
-      - himari-shared
+      - chums-shared
 
 networks:
-  himari-shared:
+  chums-shared:
     external: true

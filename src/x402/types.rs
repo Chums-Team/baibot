@@ -1,5 +1,5 @@
 //! Wire types of the sidecar → bot direction. Mirrors `InternalSettledNotify` in
-//! `x402-sidecar/src/himari_x402_sidecar/models.py`.
+//! `x402-sidecar/src/x402_sidecar/models.py`.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

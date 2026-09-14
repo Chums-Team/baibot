@@ -25,7 +25,7 @@ class PaymentRequestIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    room_id: str = Field(..., description="Matrix room id, e.g. !abc:tron.mx")
+    room_id: str = Field(..., description="Matrix room id, e.g. !abc:example.com")
     user_mxid: str = Field(..., description="@user:server who triggered the call")
     amount_usd: float = Field(..., gt=0, description="Required top-up in USD")
     correlation_id: UUID | None = Field(

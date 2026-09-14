@@ -41,8 +41,8 @@ def _message_ints(auth: dict) -> dict:
 
 
 def test_builder_reproduces_signed_typed_data():
-    from himari_x402_sidecar.permit2_builder import build_permit2_typed_data
-    from himari_x402_sidecar.utils import chain_id_for
+    from x402_sidecar.permit2_builder import build_permit2_typed_data
+    from x402_sidecar.utils import chain_id_for
 
     auth = VECTOR["permit2Authorization"]
     built = build_permit2_typed_data(
@@ -75,7 +75,7 @@ def test_digest_matches_recorded():
 
 
 def test_signature_recovers_to_buyer():
-    from himari_x402_sidecar.utils import normalize_to_evm_hex
+    from x402_sidecar.utils import normalize_to_evm_hex
 
     typed = encode_typed_data(
         domain_data=VECTOR["domain"],
@@ -95,7 +95,7 @@ def test_signature_recovers_to_buyer():
 
 
 def test_wire_body_matches_what_the_facilitator_accepted():
-    from himari_x402_sidecar.permit2_builder import build_facilitator_body
+    from x402_sidecar.permit2_builder import build_facilitator_body
 
     body = build_facilitator_body(
         requirements=VECTOR["paymentRequirements"],

@@ -5,7 +5,7 @@
 //! `cc.chums.x402_request` event, so the user can sign the payment in their wallet.
 //!
 //! The wire shape mirrors `PaymentRequestIn` / `PaymentRequestOut` in
-//! `x402-sidecar/src/himari_x402_sidecar/models.py`. The two sides must stay in sync: the
+//! `x402-sidecar/src/x402_sidecar/models.py`. The two sides must stay in sync: the
 //! sidecar rejects unknown request fields.
 
 use std::time::Duration;

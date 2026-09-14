@@ -27,7 +27,7 @@ _PAYMENT_COLUMNS_V2: tuple[tuple[str, str], ...] = (
 
 
 def _migration_sql(name: str) -> str:
-    package = "himari_x402_sidecar.migrations"
+    package = "x402_sidecar.migrations"
     return resources.files(package).joinpath(name).read_text(encoding="utf-8")
 
 

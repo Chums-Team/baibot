@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from himari_x402_sidecar.utils import (
+from x402_sidecar.utils import (
     TronAddressError,
     base58check_decode,
     canonical_network,

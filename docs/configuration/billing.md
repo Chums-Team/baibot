@@ -43,7 +43,7 @@ billing:
 | `db_path` | Path to the ledger file. Defaults to `billing.db` inside `persistence.data_dir_path`. |
 | `pricing` | Fallback prices per model id, in USD per million tokens (the way providers publish them). Used only when the provider does not report the cost of a call. Entries add to, or override, the built-in table. |
 
-Every key can be overridden with an environment variable, following the usual naming rule (`billing.daily_cap_usd` → `BAIBOT_BILLING_DAILY_CAP_USD`). `BAIBOT_BILLING_ADMIN_MXIDS` takes a space-separated list. Setting any `BAIBOT_BILLING_*` variable enables billing even when the configuration file has no `billing` section.
+Every key can be overridden with an environment variable, following the usual naming rule (`billing.daily_cap_usd` → `BAIBOT_BILLING_DAILY_CAP_USD`). `BAIBOT_BILLING_ADMIN_MXIDS` takes a list separated by spaces or commas. Setting any `BAIBOT_BILLING_*` variable enables billing even when the configuration file has no `billing` section.
 
 > [!WARNING]
 > If the model used for text generation is neither priced by the provider nor present in the pricing table, its calls are charged `$0` and the charge row is flagged with `unknown_model_audit: true` in its metadata, so the room is not blocked but the bot effectively pays for the call. Make sure every paid model you use has a pricing entry.

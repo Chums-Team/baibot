@@ -113,10 +113,10 @@ def create_app() -> FastAPI:
         )
 
     app = FastAPI(
-        title="Himari x402 sidecar",
+        title="x402 sidecar",
         version="0.2.0",
         description=(
-            "Bridges the Rust Himari bot and the Flutter client to an x402 v2 "
+            "Bridges the Rust bot and the Flutter client to an x402 v2 "
             "facilitator (TRON `exact` scheme via Permit2). Holds the facilitator "
             "API key and the payment_id ↔ nonce mapping."
         ),
@@ -585,5 +585,5 @@ def uuid7() -> UUID:
     return UUID(int=int_value)
 
 
-# Module-level instance for `uvicorn himari_x402_sidecar.app:app`.
+# Module-level instance for `uvicorn x402_sidecar.app:app`.
 app = create_app()

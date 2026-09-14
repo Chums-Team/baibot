@@ -76,11 +76,11 @@ def base_env(monkeypatch):
 
 def _build(monkeypatch, network: str, amount_usd: float = 0.10):
     monkeypatch.setenv("X402_NETWORK", network)
-    from himari_x402_sidecar import config as config_mod
+    from x402_sidecar import config as config_mod
 
     importlib.reload(config_mod)
     config_mod._settings = None
-    from himari_x402_sidecar.facilitator_client import FacilitatorClient
+    from x402_sidecar.facilitator_client import FacilitatorClient
 
     settings = config_mod.Settings()  # type: ignore[call-arg]
     client = FacilitatorClient(settings)
@@ -161,7 +161,7 @@ def test_all_typed_data_addresses_are_lowercase_evm_hex(base_env):
     ],
 )
 def test_contracts_resolve_per_network(base_env, network, permit2, proxy, usdt):
-    from himari_x402_sidecar.utils import normalize_to_evm_hex
+    from x402_sidecar.utils import normalize_to_evm_hex
 
     build = _build(base_env, network)
     payload = build.permit_payload
@@ -174,7 +174,7 @@ def test_contracts_resolve_per_network(base_env, network, permit2, proxy, usdt):
 
 
 def test_witness_to_is_agent_wallet(base_env):
-    from himari_x402_sidecar.utils import normalize_to_evm_hex
+    from x402_sidecar.utils import normalize_to_evm_hex
 
     build = _build(base_env, "tron:0x2b6653dc")
     assert build.permit_payload["message"]["witness"]["to"] == normalize_to_evm_hex(

@@ -35,8 +35,8 @@ def required_env(monkeypatch):
 
 def _reload_app():
     """Force-reload app + config so a fresh USE_STUB env-var is picked up."""
-    from himari_x402_sidecar import config as config_mod
-    from himari_x402_sidecar import app as app_mod
+    from x402_sidecar import config as config_mod
+    from x402_sidecar import app as app_mod
     importlib.reload(config_mod)
     importlib.reload(app_mod)
     config_mod._settings = None
@@ -79,7 +79,7 @@ def test_health_defaults_to_live_mode(required_env, monkeypatch):
 def test_startup_banner_logged_in_stub_mode(required_env, caplog):
     required_env.setenv("X402_FACILITATOR_USE_STUB", "true")
     app_mod = _reload_app()
-    with caplog.at_level(logging.WARNING, logger="himari_x402_sidecar.app"):
+    with caplog.at_level(logging.WARNING, logger="x402_sidecar.app"):
         app_mod.create_app()
     # Startup-time warning (not request-time) — looks for the prefix.
     matches = [r for r in caplog.records if "STARTUP" in r.message]
@@ -94,7 +94,7 @@ def test_startup_banner_logged_in_stub_mode(required_env, caplog):
 def test_no_startup_banner_in_live_mode(required_env, caplog):
     required_env.setenv("X402_FACILITATOR_USE_STUB", "false")
     app_mod = _reload_app()
-    with caplog.at_level(logging.WARNING, logger="himari_x402_sidecar.app"):
+    with caplog.at_level(logging.WARNING, logger="x402_sidecar.app"):
         app_mod.create_app()
     # Live mode is the prod state — no spurious STUB warning at startup.
     assert not any(
@@ -112,15 +112,15 @@ async def test_per_call_warning_on_each_stub_payment_request(
 ):
     required_env.setenv("X402_FACILITATOR_USE_STUB", "true")
     _reload_app()
-    from himari_x402_sidecar import config as config_mod
-    from himari_x402_sidecar.facilitator_client import FacilitatorClient
+    from x402_sidecar import config as config_mod
+    from x402_sidecar.facilitator_client import FacilitatorClient
 
     settings = config_mod.Settings()  # type: ignore[call-arg]
     client = FacilitatorClient(settings)
     try:
         with caplog.at_level(
             logging.WARNING,
-            logger="himari_x402_sidecar.facilitator_client",
+            logger="x402_sidecar.facilitator_client",
         ):
             client.build_payment_request(
                 amount_usd=0.10,

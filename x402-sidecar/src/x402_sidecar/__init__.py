@@ -1,4 +1,4 @@
-"""Himari x402 sidecar — thin FastAPI service in front of an x402 v2 facilitator.
+"""x402 sidecar — thin FastAPI service in front of an x402 v2 facilitator.
 
 Bridges between the Rust bot (which speaks plain HTTP to this sidecar) and the
 x402 facilitator (which speaks the x402 wire format on top of TIP-712 /

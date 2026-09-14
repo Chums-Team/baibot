@@ -8,7 +8,7 @@ import json
 import httpx
 import pytest
 
-from himari_x402_sidecar.facilitator_watch import FacilitatorWatch
+from x402_sidecar.facilitator_watch import FacilitatorWatch
 
 NET = "tron:0xcd8690dc"
 RELAYER = "TKNnggcU5Ph18hSdK1U8xeLAG7YrqKwoUu"

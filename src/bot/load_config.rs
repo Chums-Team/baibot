@@ -155,7 +155,7 @@ pub fn load() -> anyhow::Result<Config> {
             }
             cfg_env::BAIBOT_BILLING_ADMIN_MXIDS => {
                 billing_section(&mut config).admin_mxids = value
-                    .split(' ')
+                    .split([' ', ','])
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
                     .collect();

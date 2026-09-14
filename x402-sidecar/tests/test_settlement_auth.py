@@ -16,7 +16,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from himari_x402_sidecar import auth
+from x402_sidecar import auth
 
 
 FAC_SECRET = "fac-webhook-32" * 4
@@ -30,7 +30,7 @@ def env(monkeypatch):
     monkeypatch.setenv("X402_AGENT_WALLET", "TSkeaPMSuaojcCzE7mWqw4xN1awU7NfdfY")
     monkeypatch.setenv("SIDECAR_DB_PATH", ":memory:")
     monkeypatch.setenv("BOT_X402_NOTIFY_URL", "http://bot.test/internal/x402-settled")
-    from himari_x402_sidecar import config as config_mod, app as app_mod
+    from x402_sidecar import config as config_mod, app as app_mod
     importlib.reload(config_mod)
     importlib.reload(app_mod)
     config_mod._settings = None

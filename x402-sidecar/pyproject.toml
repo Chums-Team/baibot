@@ -3,7 +3,7 @@ requires = ["hatchling>=1.18.0"]
 build-backend = "hatchling.build"
 
 [project]
-name = "himari-x402-sidecar"
+name = "x402-sidecar"
 version = "0.2.0"
 description = "Thin Python sidecar bridging the Rust bot (baibot, chums branch) + Flutter client to an x402 v2 facilitator (TRON exact/Permit2)."
 readme = "README.md"
@@ -30,7 +30,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/himari_x402_sidecar"]
+packages = ["src/x402_sidecar"]
 
 [tool.ruff]
 line-length = 100

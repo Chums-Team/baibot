@@ -5,3 +5,8 @@
 /data
 /config.yml
 /.env
+
+# SQLite files of the billing ledger (billing.db_path may point outside /data).
+*.db
+*.db-shm
+*.db-wal

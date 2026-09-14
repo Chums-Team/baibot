@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from himari_x402_sidecar import db
+from x402_sidecar import db
 
 
 @pytest.fixture

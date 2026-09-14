@@ -28,7 +28,7 @@ def required_env(monkeypatch):
 
 
 def _fresh_settings():
-    from himari_x402_sidecar import config as config_mod
+    from x402_sidecar import config as config_mod
 
     importlib.reload(config_mod)
     config_mod._settings = None
@@ -36,7 +36,7 @@ def _fresh_settings():
 
 
 async def _client_with(handler):
-    from himari_x402_sidecar.facilitator_client import USER_AGENT, FacilitatorClient
+    from x402_sidecar.facilitator_client import USER_AGENT, FacilitatorClient
 
     settings = _fresh_settings()
     client = FacilitatorClient(settings)
@@ -50,7 +50,7 @@ async def _client_with(handler):
 
 
 def _wire_body():
-    from himari_x402_sidecar.permit2_builder import (
+    from x402_sidecar.permit2_builder import (
         build_facilitator_body,
         build_payment_requirements,
         build_permit2_authorization,
@@ -223,7 +223,7 @@ async def test_settle_failure_is_returned_not_raised(required_env):
     ],
 )
 async def test_settle_raises_on_non_protocol_responses(required_env, response):
-    from himari_x402_sidecar.facilitator_client import FacilitatorError
+    from x402_sidecar.facilitator_client import FacilitatorError
 
     client = await _client_with(lambda request: response)
     try:
@@ -235,7 +235,7 @@ async def test_settle_raises_on_non_protocol_responses(required_env, response):
 
 @pytest.mark.asyncio
 async def test_verify_raises_on_network_error(required_env):
-    from himari_x402_sidecar.facilitator_client import FacilitatorError
+    from x402_sidecar.facilitator_client import FacilitatorError
 
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("boom", request=request)
@@ -278,7 +278,7 @@ def test_build_payment_request_makes_no_http_calls(required_env):
         calls.append(request.url.path)
         return httpx.Response(500)
 
-    from himari_x402_sidecar.facilitator_client import FacilitatorClient
+    from x402_sidecar.facilitator_client import FacilitatorClient
 
     settings = _fresh_settings()
     client = FacilitatorClient(settings)

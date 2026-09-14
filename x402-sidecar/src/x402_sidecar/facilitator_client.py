@@ -47,7 +47,7 @@ from .utils import (
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "himari-x402-sidecar/0.2"
+USER_AGENT = "x402-sidecar/0.2"
 
 
 class FacilitatorError(Exception):
