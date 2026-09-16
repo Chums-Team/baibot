@@ -43,6 +43,14 @@ jobs:
       - name: Unit tests
         run: just test
 
+      # `tron-login` is a default feature, so the hooks above only ever build with it. This
+      # step keeps the `--no-default-features` build honest: the feature gates
+      # (`#[cfg(feature = "tron-login")]`) and the tests that only run without it.
+      - name: Lint & test without default features
+        run: |
+          cargo clippy --all-targets --no-default-features -- -D warnings
+          cargo test --no-default-features
+
   # The prek job never builds a container image, so a bump of the Dockerfile's
   # base image reaches main unvalidated and fails later, in Publish, after
   # ghcr.io/etkecc/baibot:latest has already been attempted. These two jobs close
