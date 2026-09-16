@@ -78,7 +78,8 @@ bs58 = { version = "0.5", default-features = false, features = ["std", "check"],
 zeroize = { version = "1.8", default-features = false, features = ["alloc"], optional = true }
 
 [dev-dependencies]
-tokio = { version = "1.53.*", features = ["time"] }
+# `net` for the TCP listener the tron_login challenge client is tested against.
+tokio = { version = "1.53.*", features = ["time", "net"] }
 # `oneshot` requests against the webhook router without a TCP listener.
 tower = { version = "0.5", default-features = false, features = ["util"] }
 

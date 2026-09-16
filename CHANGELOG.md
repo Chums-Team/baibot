@@ -14,6 +14,8 @@ Changes of the [Chums-Team/baibot](https://github.com/Chums-Team/baibot) `chums`
 
 - (**Feature**) [🚧 Administrator-only commands](./docs/access.md#-administrator-only-commands): `access.commands_admin_only` reserves the bot's commands for `access.admin_patterns`, except the heads listed in `access.commands_admin_exempt` (`balance`, `topup`, `image` by default); conversation is unaffected.
 
+- (**Feature**) [🔐 TRON wallet login](./docs/configuration/authentication.md#tron-wallet-authentication): a `user.tron` section (`private_key` or `seed_phrase`, optional `origin`) logs the bot in through the Chums homeserver's `cc.chums.login.tron` login type, for homeservers where password login is off and accounts belong to TRON wallets. The bot signs the homeserver's challenge the way TronLink's `signMessageV2` does and continues with the resulting access token; the wallet is only used when there is no saved session. Behind the `tron-login` cargo feature, on by default.
+
 - (**Improvement**) Deployment: [`docker-compose.yml`](./docker-compose.yml) and [`.env.example`](./.env.example) run the bot next to the sidecar on a shared Docker network, with a [📓 Runbook](./docs/runbook.md) from a clean host to a verified payment. The container image now executes the binary directly, so `docker stop` shuts the bot down gracefully. CI also runs the sidecar's tests; images are published to `ghcr.io/chums-team/baibot` from the `chums` branch (tag `chums`) and from `v*` tags.
 
 - (**Internal Improvement**) `TextGenerationResult` carries the usage reported by the provider (cost and token counts), which the billing reads; every provider fills what it has.

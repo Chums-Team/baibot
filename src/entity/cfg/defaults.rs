@@ -8,12 +8,21 @@ const PERSISTENCE_DB_DIR_NAME: &str = "db";
 
 const BILLING_DB_FILE_NAME: &str = "billing.db";
 
+/// The `origin` the bot reports when asking the Chums homeserver for a TRON login challenge.
+/// One value for every instance of the bot; the homeserver lists it in
+/// `tron_auth_allowed_origins`. See docs/configuration/authentication.md.
+const USER_TRON_ORIGIN: &str = "https://baibot.tron.mx";
+
 pub(crate) fn name() -> String {
     NAME.to_owned()
 }
 
 pub(crate) fn config_file_path() -> String {
     CONFIG_FILE_PATH.to_owned()
+}
+
+pub(super) fn user_tron_origin() -> String {
+    USER_TRON_ORIGIN.to_owned()
 }
 
 pub(super) fn command_prefix() -> String {

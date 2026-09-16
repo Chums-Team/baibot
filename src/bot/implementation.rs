@@ -476,6 +476,22 @@ async fn create_matrix_link(config: &Config) -> anyhow::Result<MatrixLink> {
             device_id,
             access_token,
         },
+        ConfigUserAuth::Tron {
+            username,
+            user_id,
+            key,
+            origin,
+        } => {
+            tron_login_credentials(
+                config,
+                &session_file_path,
+                &username,
+                user_id,
+                &key,
+                &origin,
+            )
+            .await?
+        }
     };
 
     let login_encryption = LoginEncryption::new(
@@ -496,6 +512,88 @@ async fn create_matrix_link(config: &Config) -> anyhow::Result<MatrixLink> {
     let init_config = InitConfig::new(login_config, persistence_config);
 
     mxlink::init(&init_config).await.map_err(|e| e.into())
+}
+
+/// The credentials for mxlink when the bot authenticates through a TRON wallet.
+///
+/// Without a session file, the bot logs in through the wallet right here and hands mxlink the
+/// resulting access token, the same way a pre-issued token is handed over. With a session file,
+/// mxlink restores the session from the file and never reads the credentials (mxlink 1.15,
+/// `src/init.rs`: the restore branch does not touch `login.credentials`), so the bot passes
+/// placeholders rather than logging in again and leaving an orphan device behind at each start.
+#[cfg(feature = "tron-login")]
+async fn tron_login_credentials(
+    config: &Config,
+    session_file_path: &std::path::Path,
+    username: &str,
+    user_id: mxlink::matrix_sdk::ruma::OwnedUserId,
+    key: &crate::entity::cfg::TronKeySource,
+    origin: &str,
+) -> anyhow::Result<LoginCredentials> {
+    use crate::tron_login::{LoginRequest, login};
+
+    if session_file_path.exists() {
+        tracing::info!(
+            "Found an existing session in `{}`; not logging in through the TRON wallet",
+            session_file_path.to_string_lossy()
+        );
+
+        return Ok(LoginCredentials::AccessToken {
+            user_id,
+            device_id: "UNUSED".into(),
+            access_token: String::new(),
+        });
+    }
+
+    let signer = key.signer()?;
+
+    tracing::info!(
+        address = signer.address(),
+        origin,
+        "No session yet; logging in through the TRON wallet as {user_id}"
+    );
+
+    let session = login(&LoginRequest {
+        homeserver_url: &config.homeserver.url,
+        signer: &signer,
+        localpart: username,
+        expected_user_id: &user_id,
+        origin,
+        device_display_name: &config.user.name,
+    })
+    .await
+    .map_err(|err| match err.hint() {
+        Some(hint) => anyhow::anyhow!("TRON wallet login failed: {err}. Hint: {hint}"),
+        None => anyhow::anyhow!("TRON wallet login failed: {err}"),
+    })?;
+
+    tracing::info!(
+        device_id = %session.device_id,
+        "Logged in through the TRON wallet as {}",
+        session.user_id
+    );
+
+    Ok(LoginCredentials::AccessToken {
+        user_id: session.user_id,
+        device_id: session.device_id,
+        access_token: session.access_token,
+    })
+}
+
+/// `user.tron` is refused by the configuration validation in a build without the feature, so
+/// this is unreachable; it only keeps the `match` above exhaustive.
+#[cfg(not(feature = "tron-login"))]
+async fn tron_login_credentials(
+    _config: &Config,
+    _session_file_path: &std::path::Path,
+    _username: &str,
+    _user_id: mxlink::matrix_sdk::ruma::OwnedUserId,
+    _key: &crate::entity::cfg::TronKeySource,
+    _origin: &str,
+) -> anyhow::Result<LoginCredentials> {
+    Err(anyhow::anyhow!(
+        "This build of the bot has no TRON wallet login (built without the `tron-login` cargo feature)"
+    ))
 }
 
 pub fn create_global_configuration_manager(

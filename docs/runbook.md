@@ -13,7 +13,7 @@ The Chums client renders the bot's [📡 Matrix events](./matrix-events.md) as t
 ### Prerequisites
 
 1. A host with Docker and Docker Compose.
-2. A Matrix homeserver and an account for the bot on it (localpart plus password or access token). See [🔐 Authentication](./configuration/authentication.md).
+2. A Matrix homeserver and an account for the bot on it. On the Chums homeserver the account is logged into with a TRON wallet: create the account with the wallet from the Chums client (or bind the wallet to an existing account there) and keep the wallet's private key or seed phrase for the bot. Elsewhere, a password or an access token. See [🔐 Authentication](./configuration/authentication.md).
 3. An API key for an LLM provider. [OpenRouter](./providers.md) is recommended: the bot charges the real cost of each call reported by OpenRouter; with other providers it charges by the [pricing table](./configuration/billing.md#configuration).
 4. An x402 facilitator API key, issued to the TRON wallet that receives the payments. The sidecar's [`.env.example`](../x402-sidecar/.env.example) names the facilitator and the networks.
 5. Two random secrets, e.g. from `openssl rand -hex 32`: one shared by the bot and the sidecar (`internal_secret`), one for the sidecar's legacy settlement webhook (`X402_FACILITATOR_WEBHOOK_SECRET`).
@@ -63,6 +63,7 @@ mkdir data
 
 In `config.yml`, besides the usual homeserver and user settings ([🛠️ Configuration](./configuration/README.md)):
 
+- `user:` — on the Chums homeserver, remove `password` and put the wallet key in `.env` as `BAIBOT_USER_TRON_PRIVATE_KEY` or `BAIBOT_USER_TRON_SEED_PHRASE` ([🔐 Authentication](./configuration/authentication.md#tron-wallet-authentication)). The homeserver must already know the wallet: `curl "https://<homeserver>/_ever/tron-auth/lookup?address=<wallet address>"` answers `{"bound": true, "user_id": "@<mxid_localpart>:<server_name>"}`.
 - `billing:` — uncomment the section; set `admin_mxids` to the users who may run the administration commands. The other keys have sensible defaults ([💰 Billing](./configuration/billing.md)).
 - `x402:` — uncomment and set it up for the compose layout ([💸 x402 top-ups](./configuration/x402.md)):
 
@@ -88,7 +89,7 @@ docker compose up -d --build                  # or: local build
 docker compose logs -f
 ```
 
-Expected in the log at start-up: `x402 webhook server listening` with the bind address, `x402 top-ups enabled` with the sidecar URL, then the usual login and sync lines. A configuration error (an `x402` section without `billing`, a non-loopback bind without the flag, an unknown locale) stops the bot before it logs in, with the reason.
+Expected in the log at start-up: `x402 webhook server listening` with the bind address, `x402 top-ups enabled` with the sidecar URL, then the usual login and sync lines. With the wallet login, the first start logs `logging in through the TRON wallet` with the address and then `Logged in through the TRON wallet`; later starts log `Found an existing session` instead, since the saved session is reused. The homeserver's log shows the same login as `chums_tron_auth` events (`challenge_issued`, `auth_accepted`). A configuration error (an `x402` section without `billing`, a non-loopback bind without the flag, an unknown locale) stops the bot before it logs in, with the reason.
 
 The sidecar's log should not show connection errors to the bot; it only calls the bot when a payment settles.
 

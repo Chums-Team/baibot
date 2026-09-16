@@ -6,7 +6,8 @@ use anyhow::anyhow;
 use crate::agent::AgentPurpose;
 
 pub use crate::entity::cfg::{
-    Avatar, Config, ConfigBilling, ConfigX402, defaults as cfg_defaults, env as cfg_env,
+    Avatar, Config, ConfigBilling, ConfigUserTron, ConfigX402, defaults as cfg_defaults,
+    env as cfg_env,
 };
 
 pub fn load() -> anyhow::Result<Config> {
@@ -39,6 +40,15 @@ pub fn load() -> anyhow::Result<Config> {
             }
             cfg_env::BAIBOT_USER_DEVICE_ID => {
                 config.user.device_id = optional_non_empty(value);
+            }
+            cfg_env::BAIBOT_USER_TRON_PRIVATE_KEY => {
+                user_tron_section(&mut config).private_key = optional_non_empty(value);
+            }
+            cfg_env::BAIBOT_USER_TRON_SEED_PHRASE => {
+                user_tron_section(&mut config).seed_phrase = optional_non_empty(value);
+            }
+            cfg_env::BAIBOT_USER_TRON_ORIGIN => {
+                user_tron_section(&mut config).origin = optional_non_empty(value);
             }
             cfg_env::BAIBOT_USER_ENCRYPTION_RECOVERY_PASSPHRASE => {
                 config.user.encryption.recovery_passphrase = Some(value);
@@ -228,6 +238,11 @@ fn billing_section(config: &mut Config) -> &mut ConfigBilling {
 /// Same rule for `BAIBOT_X402_*`: any of them creates the `x402` section.
 fn x402_section(config: &mut Config) -> &mut ConfigX402 {
     config.x402.get_or_insert_with(ConfigX402::default)
+}
+
+/// Same rule for `BAIBOT_USER_TRON_*`: any of them creates the `user.tron` section.
+fn user_tron_section(config: &mut Config) -> &mut ConfigUserTron {
+    config.user.tron.get_or_insert_with(ConfigUserTron::default)
 }
 
 fn parse_f64(key: &str, value: &str) -> anyhow::Result<f64> {

@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::PathBuf;
 
 use mxlink::helpers::encryption::EncryptionKey;
@@ -98,6 +99,116 @@ pub enum ConfigUserAuth {
         device_id: OwnedDeviceId,
         access_token: String,
     },
+    /// Login through a TRON wallet (`user.tron`), see `src/tron_login`.
+    Tron {
+        username: String,
+        user_id: OwnedUserId,
+        key: TronKeySource,
+        origin: String,
+    },
+}
+
+/// The wallet key of [`ConfigUserAuth::Tron`], as configured.
+///
+/// `Debug` does not print the key.
+pub enum TronKeySource {
+    PrivateKeyHex(String),
+    SeedPhrase(String),
+}
+
+impl fmt::Debug for TronKeySource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PrivateKeyHex(_) => f.write_str("PrivateKeyHex([redacted])"),
+            Self::SeedPhrase(_) => f.write_str("SeedPhrase([redacted])"),
+        }
+    }
+}
+
+#[cfg(feature = "tron-login")]
+impl TronKeySource {
+    /// The signer for the key, or the reason the key is unusable.
+    pub fn signer(&self) -> Result<crate::tron_login::TronSigner, crate::tron_login::TronKeyError> {
+        use crate::tron_login::TronSigner;
+
+        match self {
+            Self::PrivateKeyHex(private_key) => TronSigner::from_private_key_hex(private_key),
+            Self::SeedPhrase(seed_phrase) => TronSigner::from_seed_phrase(seed_phrase),
+        }
+    }
+}
+
+/// TRON wallet authentication (`user.tron`), see docs/configuration/authentication.md.
+///
+/// The homeserver logs the bot in as the Matrix user the wallet is bound to.
+/// `Debug` does not print the key material.
+#[derive(Default, Serialize, Deserialize)]
+pub struct ConfigUserTron {
+    /// The wallet's private key: 32 bytes in hex. Either this or `seed_phrase`.
+    #[serde(default)]
+    pub private_key: Option<String>,
+
+    /// The wallet's BIP-39 seed phrase (12 to 24 English words). Either this or `private_key`.
+    #[serde(default)]
+    pub seed_phrase: Option<String>,
+
+    /// The `origin` reported to the homeserver when asking for a login challenge; it must be
+    /// listed in the homeserver's `tron_auth_allowed_origins`. Defaults to the value the Chums
+    /// homeserver lists for this bot.
+    #[serde(default)]
+    pub origin: Option<String>,
+}
+
+impl fmt::Debug for ConfigUserTron {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConfigUserTron")
+            .field(
+                "private_key",
+                &self.private_key.as_ref().map(|_| "[redacted]"),
+            )
+            .field(
+                "seed_phrase",
+                &self.seed_phrase.as_ref().map(|_| "[redacted]"),
+            )
+            .field("origin", &self.origin)
+            .finish()
+    }
+}
+
+impl ConfigUserTron {
+    fn key_source(&self) -> anyhow::Result<TronKeySource> {
+        let private_key = self
+            .private_key
+            .as_deref()
+            .filter(|value| !value.is_empty());
+        let seed_phrase = self
+            .seed_phrase
+            .as_deref()
+            .filter(|value| !value.is_empty());
+
+        match (private_key, seed_phrase) {
+            (Some(private_key), None) => Ok(TronKeySource::PrivateKeyHex(private_key.to_owned())),
+            (None, Some(seed_phrase)) => Ok(TronKeySource::SeedPhrase(seed_phrase.to_owned())),
+            (Some(_), Some(_)) => Err(anyhow::anyhow!(
+                "Set exactly one of user.tron.private_key ({}) and user.tron.seed_phrase ({})",
+                super::env::BAIBOT_USER_TRON_PRIVATE_KEY,
+                super::env::BAIBOT_USER_TRON_SEED_PHRASE
+            )),
+            (None, None) => Err(anyhow::anyhow!(
+                "The user.tron section needs the wallet key: set user.tron.private_key ({}) or user.tron.seed_phrase ({})",
+                super::env::BAIBOT_USER_TRON_PRIVATE_KEY,
+                super::env::BAIBOT_USER_TRON_SEED_PHRASE
+            )),
+        }
+    }
+
+    fn origin(&self) -> String {
+        self.origin
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+            .unwrap_or_else(super::defaults::user_tron_origin)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -180,6 +291,10 @@ pub struct ConfigUser {
     #[serde(default)]
     pub device_id: Option<String>,
 
+    /// Optional. Login through a TRON wallet instead of a password or an access token.
+    #[serde(default)]
+    pub tron: Option<ConfigUserTron>,
+
     #[serde(default = "super::defaults::name")]
     pub name: String,
 
@@ -219,49 +334,93 @@ impl ConfigUser {
             .access_token
             .as_deref()
             .filter(|value| !value.is_empty());
+        let tron = self.tron.as_ref();
 
-        match (password, access_token) {
-            (Some(_), Some(_)) => Err(anyhow::anyhow!(
-                "Set exactly one authentication method: either user.password ({}) OR user.access_token ({}) + user.device_id ({})",
+        let modes_set = [password.is_some(), access_token.is_some(), tron.is_some()]
+            .into_iter()
+            .filter(|set| *set)
+            .count();
+
+        if modes_set > 1 {
+            return Err(anyhow::anyhow!(
+                "Set exactly one authentication method: user.password ({}), user.access_token ({}) + user.device_id ({}), or user.tron ({}, {})",
                 super::env::BAIBOT_USER_PASSWORD,
                 super::env::BAIBOT_USER_ACCESS_TOKEN,
-                super::env::BAIBOT_USER_DEVICE_ID
-            )),
-            (None, None) => Err(anyhow::anyhow!(
-                "Set one authentication method: either user.password ({}) OR user.access_token ({}) + user.device_id ({})",
-                super::env::BAIBOT_USER_PASSWORD,
-                super::env::BAIBOT_USER_ACCESS_TOKEN,
-                super::env::BAIBOT_USER_DEVICE_ID
-            )),
-            (Some(password), None) => Ok(ConfigUserAuth::UserPassword {
+                super::env::BAIBOT_USER_DEVICE_ID,
+                super::env::BAIBOT_USER_TRON_PRIVATE_KEY,
+                super::env::BAIBOT_USER_TRON_SEED_PHRASE
+            ));
+        }
+
+        if let Some(password) = password {
+            return Ok(ConfigUserAuth::UserPassword {
                 username: self.mxid_localpart.to_owned(),
                 password: password.to_owned(),
-            }),
-            (None, Some(access_token)) => {
-                let device_id = self
-                    .device_id
-                    .as_deref()
-                    .filter(|value| !value.is_empty())
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "user.device_id ({}) must be set when using access token authentication",
-                            super::env::BAIBOT_USER_DEVICE_ID
-                        )
-                    })?;
+            });
+        }
 
-                let user_id = OwnedUserId::try_from(format!(
-                    "@{}:{}",
-                    self.mxid_localpart, homeserver_server_name
-                ))
-                .map_err(|e| anyhow::anyhow!("Invalid user ID: {e}"))?;
+        if let Some(access_token) = access_token {
+            let device_id = self
+                .device_id
+                .as_deref()
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "user.device_id ({}) must be set when using access token authentication",
+                        super::env::BAIBOT_USER_DEVICE_ID
+                    )
+                })?;
 
-                Ok(ConfigUserAuth::AccessToken {
-                    user_id,
-                    device_id: OwnedDeviceId::from(device_id),
-                    access_token: access_token.to_owned(),
-                })
+            return Ok(ConfigUserAuth::AccessToken {
+                user_id: self.user_id(homeserver_server_name)?,
+                device_id: OwnedDeviceId::from(device_id),
+                access_token: access_token.to_owned(),
+            });
+        }
+
+        if let Some(tron) = tron {
+            let key = tron.key_source()?;
+            let origin = tron.origin();
+
+            #[cfg(not(feature = "tron-login"))]
+            {
+                let _ = (key, origin);
+                return Err(anyhow::anyhow!(
+                    "The user.tron section is set, but this build of the bot has no TRON wallet login: it was built without the `tron-login` cargo feature"
+                ));
+            }
+
+            #[cfg(feature = "tron-login")]
+            {
+                // Fail at start-up rather than at login time on an unusable key.
+                key.signer()
+                    .map_err(|err| anyhow::anyhow!("user.tron: {err}"))?;
+
+                return Ok(ConfigUserAuth::Tron {
+                    username: self.mxid_localpart.to_owned(),
+                    user_id: self.user_id(homeserver_server_name)?,
+                    key,
+                    origin,
+                });
             }
         }
+
+        Err(anyhow::anyhow!(
+            "Set one authentication method: user.password ({}), user.access_token ({}) + user.device_id ({}), or user.tron ({}, {})",
+            super::env::BAIBOT_USER_PASSWORD,
+            super::env::BAIBOT_USER_ACCESS_TOKEN,
+            super::env::BAIBOT_USER_DEVICE_ID,
+            super::env::BAIBOT_USER_TRON_PRIVATE_KEY,
+            super::env::BAIBOT_USER_TRON_SEED_PHRASE
+        ))
+    }
+
+    fn user_id(&self, homeserver_server_name: &str) -> anyhow::Result<OwnedUserId> {
+        OwnedUserId::try_from(format!(
+            "@{}:{}",
+            self.mxid_localpart, homeserver_server_name
+        ))
+        .map_err(|e| anyhow::anyhow!("Invalid user ID: {e}"))
     }
 }
 

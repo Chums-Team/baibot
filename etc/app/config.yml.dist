@@ -6,7 +6,8 @@ homeserver:
 user:
   mxid_localpart: baibot
 
-  # Authentication: set EITHER password OR access_token + device_id.
+  # Authentication: set EITHER password OR access_token + device_id OR tron.
+  # See docs/configuration/authentication.md.
   #
   # Password-based login (traditional homeservers):
   password: baibot
@@ -15,6 +16,16 @@ user:
   # Generate a token via: mas-cli manage issue-compatibility-token <username> [device_id]
   # access_token: null
   # device_id: null
+
+  # TRON wallet login (the Chums homeserver, where password login is off).
+  # The wallet must already be bound to the bot's account on the homeserver.
+  # Set either private_key (32 bytes in hex) or seed_phrase (12-24 English words);
+  # better keep it in the environment (BAIBOT_USER_TRON_PRIVATE_KEY / BAIBOT_USER_TRON_SEED_PHRASE).
+  # origin defaults to https://baibot.tron.mx, the value the Chums homeserver allows for this bot.
+  # tron:
+  #   private_key: null
+  #   seed_phrase: null
+  #   origin: null
 
   # The name the bot uses as a display name and when it refers to itself.
   # Leave empty to use the default (baibot).
