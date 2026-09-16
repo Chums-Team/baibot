@@ -14,6 +14,13 @@ edition = "2024"
 name = "baibot"
 path = "src/lib.rs"
 
+[features]
+default = ["tron-login"]
+# Logging in through a TRON wallet (see `src/tron_login`, docs/configuration/authentication.md).
+# Pulls in the secp256k1 / keccak / BIP-32 crates; build with `--no-default-features` to leave
+# them out.
+tron-login = ["dep:k256", "dep:bip39", "dep:bip32", "dep:sha3", "dep:bs58", "dep:zeroize"]
+
 [dependencies]
 anthropic = { git = "https://github.com/etkecc/anthropic-rs.git", branch = "fix-content-block-image" }
 anyhow = "1.0.*"
@@ -57,6 +64,18 @@ sha2 = "0.10"
 
 # Localized replies (see `src/i18n`): `locales/*.yml` are embedded at compile time.
 rust-i18n = "4.2"
+
+# TRON wallet login (feature `tron-login`, see `src/tron_login`). Pure Rust, no C libraries.
+# Versions follow what the lockfile already carries (`digest`/`sha2` 0.10, `bs58` 0.5), so no
+# second copy of those crates is linked; `bip32` 0.5 itself depends on `k256` 0.13.
+# `bip39` (rust-bitcoin) parses the seed phrase: the mnemonic support of `bip32` takes 24-word
+# phrases only, while wallets mostly hand out 12 words.
+k256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"], optional = true }
+bip39 = { version = "2.2", default-features = false, features = ["std", "zeroize"], optional = true }
+bip32 = { version = "0.5", default-features = false, features = ["secp256k1", "std"], optional = true }
+sha3 = { version = "0.10", default-features = false, optional = true }
+bs58 = { version = "0.5", default-features = false, features = ["std", "check"], optional = true }
+zeroize = { version = "1.8", default-features = false, features = ["alloc"], optional = true }
 
 [dev-dependencies]
 tokio = { version = "1.53.*", features = ["time"] }
