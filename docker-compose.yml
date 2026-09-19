@@ -22,17 +22,25 @@
 #
 # Without the sidecar, drop the `networks` keys and the `x402` section; the rest
 # works as for upstream baibot (docs/installation.md).
+#
+# Several bots on one host: every name below that would clash is a variable with
+# the single-bot value as its default. Set them in the environment (not in .env,
+# which is the container's environment) before every `docker compose` call, or
+# export them from a file: BOT_IMAGE, BOT_CONTAINER_NAME, CHUMS_NETWORK, plus
+# SIDECAR_CONTAINER_NAME, SIDECAR_IMAGE and SIDECAR_HOST_PORT for the sidecar.
+# Each bot needs its own network, since the sidecar finds the bot by the service
+# name `bot`. See "Several bots on one host" in docs/runbook.md.
 
 services:
   bot:
     # The image CI publishes from the chums branch (.github/workflows/publish.yml):
     # `docker compose pull` fetches it, `docker compose up -d --build` builds the
     # same image locally under the same name instead.
-    image: ghcr.io/chums-team/baibot:chums
+    image: ${BOT_IMAGE:-ghcr.io/chums-team/baibot:chums}
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: chums-bot
+    container_name: ${BOT_CONTAINER_NAME:-chums-bot}
     restart: unless-stopped
     # Must own ./data. Set UID and GID in .env.
     user: "${UID:-1000}:${GID:-1000}"
@@ -64,3 +72,5 @@ services:
 networks:
   chums-shared:
     external: true
+    # The Docker network the sidecar shares. `docker network create <name>` first.
+    name: ${CHUMS_NETWORK:-chums-shared}

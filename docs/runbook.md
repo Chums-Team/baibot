@@ -145,3 +145,38 @@ Expected: no rows. The ledger is append-only; corrections are new rows (`manual-
 - **Rotating the shared secret**: change it in both `.env` files (or `config.yml`) and restart both containers together. The sidecar does not retry a notification: a settlement that arrives while the secrets differ is answered `401`, logged as `bot notify failed` on the sidecar, and has to be credited by hand (last bullet).
 - **Changing the facilitator or the network**: sidecar-side only (`x402-sidecar/.env`), then restart the sidecar. The bot forwards the network, the contracts and the receiving wallet from the sidecar's answers and has no copy of them.
 - **Reconciling a top-up that was paid but never credited** (the bot was down or rejected the notification when the sidecar called it): find the payment in the sidecar's log (`bot notify failed`, with the `payment_id`) or its database, then credit the room with `!bai billing manual-refund <room_id> <amount_usd> "<tx hash>"`.
+
+
+### 8. Several bots on one host
+
+The compose files name everything for a single bot: the containers `chums-bot` and `chums-x402-sidecar`, the network `chums-shared`, the host port `8402`. A second bot on the same host needs its own names, and its own network: the sidecar finds the bot by the service name `bot`, which two bots on one network would both claim. Every clashing name is a variable with the single-bot value as its default, so an existing deployment keeps working untouched:
+
+| Variable | Compose file | Default |
+|---|---|---|
+| `CHUMS_NETWORK` | both, the name of the shared network | `chums-shared` |
+| `BOT_IMAGE` | `docker-compose.yml` | `ghcr.io/chums-team/baibot:chums` |
+| `BOT_CONTAINER_NAME` | `docker-compose.yml` | `chums-bot` |
+| `SIDECAR_IMAGE` | `x402-sidecar/docker-compose.yml` | `chums-x402-sidecar:0.2.0` |
+| `SIDECAR_CONTAINER_NAME` | `x402-sidecar/docker-compose.yml` | `chums-x402-sidecar` |
+| `SIDECAR_HOST_PORT` | `x402-sidecar/docker-compose.yml`, the loopback port of `/health` | `8402` |
+
+They are read from the environment of `docker compose`, not from `.env` (which is the environment of the container). Keep them in a file next to the checkout and export it before every compose call, in both directories, with a compose project name per bot so `docker compose ps` and orphan detection stay separate:
+
+```sh
+# second/instance.env
+CHUMS_NETWORK=second-net
+BOT_CONTAINER_NAME=second-bot
+SIDECAR_CONTAINER_NAME=second-x402-sidecar
+SIDECAR_IMAGE=second-x402-sidecar:local
+SIDECAR_HOST_PORT=8403
+```
+
+```sh
+cd second && set -a && . ./instance.env && set +a
+docker network create "$CHUMS_NETWORK"
+(cd x402-sidecar && COMPOSE_PROJECT_NAME=second-x402 docker compose up -d --build)
+COMPOSE_PROJECT_NAME=second docker compose up -d
+curl -s "http://127.0.0.1:$SIDECAR_HOST_PORT/health" | jq
+```
+
+Each bot is its own checkout with its own `.env`, `config.yml` and `data/`; the `x402` section of `config.yml` stays the same, since the service names inside a network do not change. The sidecar runs as the `UID`/`GID` of its `.env` (the image's own user, 1001, by default) and must own `x402-sidecar/data/`.

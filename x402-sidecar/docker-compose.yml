@@ -4,21 +4,29 @@
 # settlement notifications to `http://bot:9000/internal/x402-settled`.
 #
 # Create the network once:  docker network create chums-shared
+#
+# Several bots on one host: the names that would clash are variables with the
+# single-bot value as the default (CHUMS_NETWORK, SIDECAR_CONTAINER_NAME,
+# SIDECAR_IMAGE, SIDECAR_HOST_PORT). Set them in the environment before every
+# `docker compose` call; see "Several bots on one host" in ../docs/runbook.md.
 services:
   x402-sidecar:
     build:
       context: .
       dockerfile: Dockerfile
-    image: chums-x402-sidecar:0.2.0
-    container_name: chums-x402-sidecar
+    image: ${SIDECAR_IMAGE:-chums-x402-sidecar:0.2.0}
+    container_name: ${SIDECAR_CONTAINER_NAME:-chums-x402-sidecar}
     restart: unless-stopped
+    # Must own ./data (the sidecar writes its SQLite file there). The image's
+    # own user is 1001; set UID and GID in .env to the owner of ./data.
+    user: "${UID:-1001}:${GID:-1001}"
     env_file:
       - .env
     ports:
       # Host loopback exposure is for ops curl /health from the host.
       # Bot-to-sidecar traffic flows over the shared Docker network and
       # does not need this mapping. For exposing to LAN, change to "0.0.0.0:8402:8402".
-      - "127.0.0.1:8402:8402"
+      - "127.0.0.1:${SIDECAR_HOST_PORT:-8402}:8402"
     volumes:
       # Persist sidecar SQLite (payment-id ↔ context mapping).
       - ./data:/app/data
@@ -28,3 +36,5 @@ services:
 networks:
   chums-shared:
     external: true
+    # The Docker network the bot shares. `docker network create <name>` first.
+    name: ${CHUMS_NETWORK:-chums-shared}
