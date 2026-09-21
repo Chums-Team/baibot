@@ -16,6 +16,7 @@ mod conversation;
 mod entity;
 mod i18n;
 pub mod matrix;
+mod recovery;
 mod strings;
 #[cfg(feature = "tron-login")]
 pub mod tron_login;

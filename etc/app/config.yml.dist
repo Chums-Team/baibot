@@ -41,18 +41,27 @@ user:
     # An optional passphrase to use for backing up and recovering the bot's encryption keys.
     # You can use any string here.
     #
-    # If set to null, the recovery module will not be used and losing your session/database (see persistence)
-    # will mean you lose access to old messages in encrypted room.
+    # The keys (cross-signing and the room key backup) are kept in the account's secret storage
+    # under this passphrase. At every start the bot imports them from there, creating the
+    # secret storage if the account has none yet; losing the session/database (see persistence)
+    # therefore does not lose access to old messages in encrypted rooms. The log says what
+    # happened (`Recovery: secrets imported from secret storage`, `Recovery: secret storage created`).
+    #
+    # With the TRON wallet login (user.tron), null means the passphrase is derived from the
+    # wallet key, the same way the Chums web client derives it through TronLink; a value set
+    # here takes precedence. Without a wallet, null means the keys stay on this device only,
+    # and losing your session/database will mean you lose access to old messages in encrypted rooms.
     #
     # Changing this subsequently will also cause you to lose access to old messages in encrypted rooms.
     # If you really need to change this:
-    # - Set `encryption_recovery_reset_allowed` to `true` and adjust the passphrase
-    # - Remove your session file and database (see persistence)
-    # - Restart the bot
-    # - Then restore `encryption_recovery_reset_allowed` to `false` to prevent accidental resets in the future
+    # - Set `recovery_reset_allowed` to `true` and adjust the passphrase
+    # - Restart the bot; it resets the secret storage key from the new passphrase
+    # - Then restore `recovery_reset_allowed` to `false` to prevent accidental resets in the future
     recovery_passphrase: long-and-secure-passphrase-here
 
-    # An optional flag to reset the encryption recovery passphrase.
+    # An optional flag allowing the bot to reset the secret storage key from the passphrase
+    # when the passphrase does not open it, and to replace a key backup this device cannot use.
+    # Both lose the history of encrypted rooms that this device has not received.
     recovery_reset_allowed: false
 
 # Command prefix. Leave empty to use the default (!bai).

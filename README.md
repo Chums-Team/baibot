@@ -51,7 +51,7 @@ This is the `chums` branch of [Chums-Team/baibot](https://github.com/Chums-Team/
 
 - 🚧 **[Administrator-only commands](./docs/access.md#-administrator-only-commands)**, for deployments where users only talk to the bot.
 
-- 🔐 **[TRON wallet login](./docs/configuration/authentication.md#tron-wallet-authentication)**: the bot authenticates with the key of a TRON wallet (private key or seed phrase) on homeservers where accounts belong to wallets and password login is off. Cargo feature `tron-login`, on by default.
+- 🔐 **[TRON wallet login](./docs/configuration/authentication.md#tron-wallet-authentication)**: the bot authenticates with the key of a TRON wallet (private key or seed phrase) on homeservers where accounts belong to wallets and password login is off, and derives the passphrase of its encryption key backup from the same key, like the Chums web client. Cargo feature `tron-login`, on by default.
 
 - 📓 **[Runbook](./docs/runbook.md)** and a [`docker-compose.yml`](./docker-compose.yml) for running the bot next to the sidecar.
 

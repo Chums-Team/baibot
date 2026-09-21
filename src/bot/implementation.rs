@@ -11,8 +11,7 @@ use mxlink::matrix_sdk::ruma::{
 };
 
 use mxlink::{
-    InitConfig, LoginConfig, LoginCredentials, LoginEncryption, MatrixLink, PersistenceConfig,
-    TypingNoticeGuard,
+    InitConfig, LoginConfig, LoginCredentials, MatrixLink, PersistenceConfig, TypingNoticeGuard,
 };
 
 use mxlink::helpers::account_data_config::{
@@ -29,6 +28,7 @@ use crate::entity::catch_up_marker::{
 };
 use crate::entity::cfg::{
     Avatar, Config, ConfigAccess, ConfigBilling, ConfigI18n, ConfigUserAuth, ConfigX402,
+    RecoveryPassphrase,
 };
 use crate::entity::globalconfig::{GlobalConfig, GlobalConfigurationManager};
 use crate::entity::roomconfig::{RoomConfig, RoomConfigurationManager};
@@ -102,7 +102,12 @@ impl Bot {
 
         let encryption_manager = EncryptionManager::new(persistence_config_encryption_key);
 
-        let matrix_link = create_matrix_link(&config).await?;
+        let user_auth = config.user.auth_config(&config.homeserver.server_name)?;
+        let recovery_passphrase = config.user.recovery_passphrase(&user_auth)?;
+
+        let matrix_link = create_matrix_link(&config, user_auth).await?;
+
+        recover_encryption_secrets(&config, recovery_passphrase, &matrix_link).await?;
 
         let catch_up_marker_manager = create_catch_up_marker_manager(matrix_link.clone());
 
@@ -456,12 +461,13 @@ impl Bot {
     }
 }
 
-async fn create_matrix_link(config: &Config) -> anyhow::Result<MatrixLink> {
+async fn create_matrix_link(
+    config: &Config,
+    user_auth: ConfigUserAuth,
+) -> anyhow::Result<MatrixLink> {
     let session_file_path = config.persistence.session_file_path()?;
     let session_encryption_key = config.persistence.session_encryption_key()?;
     let db_dir_path: std::path::PathBuf = config.persistence.db_dir_path()?;
-
-    let user_auth = config.user.auth_config(&config.homeserver.server_name)?;
 
     let login_creds = match user_auth {
         ConfigUserAuth::UserPassword { username, password } => {
@@ -494,15 +500,12 @@ async fn create_matrix_link(config: &Config) -> anyhow::Result<MatrixLink> {
         }
     };
 
-    let login_encryption = LoginEncryption::new(
-        config.user.encryption.recovery_passphrase.clone(),
-        config.user.encryption.recovery_reset_allowed,
-    );
-
+    // mxlink would only recover the encryption secrets on a fresh login; the bot does it at
+    // every start instead, see `recover_encryption_secrets`.
     let login_config = LoginConfig::new(
         config.homeserver.url.to_owned(),
         login_creds,
-        Some(login_encryption),
+        None,
         config.user.name.to_owned(),
     );
 
@@ -512,6 +515,42 @@ async fn create_matrix_link(config: &Config) -> anyhow::Result<MatrixLink> {
     let init_config = InitConfig::new(login_config, persistence_config);
 
     mxlink::init(&init_config).await.map_err(|e| e.into())
+}
+
+/// Imports the encryption secrets from the account's secret storage, creating it when the
+/// account has none (`src/recovery.rs`). Runs at every start. Without a recovery passphrase
+/// (none configured and no TRON wallet to derive one from) the secrets stay on this device
+/// only, as in upstream baibot.
+async fn recover_encryption_secrets(
+    config: &Config,
+    passphrase: Option<RecoveryPassphrase>,
+    matrix_link: &MatrixLink,
+) -> anyhow::Result<()> {
+    let Some(passphrase) = passphrase else {
+        tracing::info!("No recovery passphrase; the encryption keys are kept on this device only");
+
+        return Ok(());
+    };
+
+    tracing::info!(
+        "Recovery passphrase taken from {}; opening the account's secret storage",
+        passphrase.source
+    );
+
+    let outcome = crate::recovery::ensure(
+        &matrix_link.client(),
+        &passphrase.value,
+        config.user.encryption.recovery_reset_allowed,
+    )
+    .await
+    .map_err(|err| match err.hint() {
+        Some(hint) => anyhow::anyhow!("Recovery failed: {err}. Hint: {hint}"),
+        None => anyhow::anyhow!("Recovery failed: {err}"),
+    })?;
+
+    tracing::info!("Recovery: {outcome}");
+
+    Ok(())
 }
 
 /// The credentials for mxlink when the bot authenticates through a TRON wallet.

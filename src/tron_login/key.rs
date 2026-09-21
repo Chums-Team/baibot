@@ -6,6 +6,7 @@
 use std::fmt;
 
 use k256::ecdsa::{SigningKey, VerifyingKey};
+use mxlink::matrix_sdk::ruma::UserId;
 use sha3::{Digest, Keccak256};
 use zeroize::Zeroizing;
 
@@ -20,6 +21,14 @@ const TRON_ADDRESS_PREFIX: u8 = 0x41;
 
 /// TIP-191 prefix. The signed digest is `keccak256(prefix || <byte length> || message)`.
 const TRON_MESSAGE_PREFIX: &str = "\x19TRON Signed Message:\n";
+
+/// Prefix of the message whose signature is the secret storage (SSSS) passphrase of a Matrix
+/// account that authenticates through a TRON wallet.
+///
+/// The Chums web client derives its passphrase the same way, through TronLink
+/// (`flutter-client`, `tronlink_ssss_service.dart`: `chums-ssss-v1:<user id>`), so the bot and
+/// the web client open the same secret storage of one account.
+pub const SECRET_STORAGE_MESSAGE_PREFIX: &str = "chums-ssss-v1:";
 
 #[derive(Debug, thiserror::Error)]
 pub enum TronKeyError {
@@ -134,6 +143,21 @@ impl TronSigner {
         bytes.push(recovery_id.to_byte() + 27);
 
         Ok(format!("0x{}", hex::encode(bytes)))
+    }
+
+    /// The secret storage (SSSS) passphrase of `user_id`: the signature of
+    /// [`SECRET_STORAGE_MESSAGE_PREFIX`] followed by the full user ID, verbatim.
+    ///
+    /// The signature is deterministic (RFC 6979), so the passphrase is stable across restarts
+    /// and hosts, and it matches what the Chums web client gets from TronLink for the same
+    /// wallet. The passphrase is a secret: it is zeroized on drop and must not be logged.
+    pub fn secret_storage_passphrase(
+        &self,
+        user_id: &UserId,
+    ) -> Result<Zeroizing<String>, TronKeyError> {
+        let message = format!("{SECRET_STORAGE_MESSAGE_PREFIX}{user_id}");
+
+        self.sign_message_v2(&message).map(Zeroizing::new)
     }
 }
 
@@ -323,6 +347,62 @@ mod tests {
         assert_eq!(
             signer.sign_message_v2(message).unwrap(),
             "0x01f7e0ce7f3c5155ab2e0f715e13c04563a9b2a70d313641fa54a1713649770a7a89d4a297e8e23ead01ca54e08eda1106809daea849e8fcdffc9488e1a69f6e1c"
+        );
+    }
+
+    #[test]
+    fn secret_storage_passphrase_is_the_signature_of_the_prefixed_user_id() {
+        let signer = TronSigner::from_private_key_hex(PRIVATE_KEY).unwrap();
+        let user_id = UserId::parse("@test:tron.mx").unwrap();
+
+        let passphrase = signer.secret_storage_passphrase(&user_id).unwrap();
+
+        assert_eq!(
+            *passphrase,
+            signer
+                .sign_message_v2("chums-ssss-v1:@test:tron.mx")
+                .unwrap()
+        );
+        assert_eq!(passphrase.len(), 2 + 130);
+        assert!(passphrase.starts_with("0x"));
+        assert_eq!(passphrase.to_lowercase(), *passphrase);
+        assert_eq!(
+            recover_address("chums-ssss-v1:@test:tron.mx", &passphrase),
+            ADDRESS
+        );
+    }
+
+    #[test]
+    fn secret_storage_passphrase_is_deterministic_across_key_sources() {
+        let user_id = UserId::parse("@test:tron.mx").unwrap();
+
+        let from_key = TronSigner::from_private_key_hex(PRIVATE_KEY)
+            .unwrap()
+            .secret_storage_passphrase(&user_id)
+            .unwrap();
+        let from_seed = TronSigner::from_seed_phrase(SEED_PHRASE)
+            .unwrap()
+            .secret_storage_passphrase(&user_id)
+            .unwrap();
+
+        assert_eq!(*from_key, *from_seed);
+    }
+
+    #[test]
+    fn secret_storage_passphrase_matches_the_web_client() {
+        // Regression guard for the TronLink parity. The web client computes
+        // `tronWeb.trx.signMessageV2("chums-ssss-v1:<user id>")` (`flutter-client`,
+        // `tronlink_ssss_service.dart`). The parity was verified live on 2026-09-21: a secret
+        // storage that the web client had created through TronLink was opened, and all its
+        // secrets decrypted, with the passphrase this method derived from the same seed phrase.
+        // The value below is the output of this implementation for the test key; it must not
+        // change.
+        let signer = TronSigner::from_private_key_hex(PRIVATE_KEY).unwrap();
+        let user_id = UserId::parse("@test:tron.mx").unwrap();
+
+        assert_eq!(
+            *signer.secret_storage_passphrase(&user_id).unwrap(),
+            "0x7fe50c9d0e114e1442d83acea1bc8a02333096588442602bc404c1102e7aebf813acc90e52feb7f030347859282b19c4df0c6d2d324f741a0a0816b90dedf1f21c"
         );
     }
 

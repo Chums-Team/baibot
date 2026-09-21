@@ -7,7 +7,8 @@ mod x402;
 
 pub use billing::ConfigBilling;
 pub use config::{
-    Avatar, Config, ConfigAccess, ConfigUserAuth, ConfigUserTron, PersistenceConfig, TronKeySource,
+    Avatar, Config, ConfigAccess, ConfigUserAuth, ConfigUserTron, PersistenceConfig,
+    RecoveryPassphrase, TronKeySource,
 };
 pub use i18n::ConfigI18n;
 pub use x402::ConfigX402;

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use mxlink::helpers::encryption::EncryptionKey;
 use mxlink::matrix_sdk::ruma::{OwnedDeviceId, OwnedUserId};
 use serde::{Deserialize, Deserializer, Serialize};
+use zeroize::Zeroizing;
 
 use crate::{
     agent::{AgentDefinition, AgentPurpose, PublicIdentifier},
@@ -415,12 +416,83 @@ impl ConfigUser {
         ))
     }
 
+    /// The passphrase of the account's secret storage, see `src/recovery.rs`.
+    ///
+    /// A configured `user.encryption.recovery_passphrase` wins. Without one, the TRON wallet
+    /// login derives the passphrase from the wallet key, the same way the Chums web client does
+    /// through TronLink, so the bot needs no passphrase of its own. `None` otherwise.
+    pub fn recovery_passphrase(
+        &self,
+        auth: &ConfigUserAuth,
+    ) -> anyhow::Result<Option<RecoveryPassphrase>> {
+        if let Some(passphrase) = self.encryption.recovery_passphrase.as_deref() {
+            return Ok(Some(RecoveryPassphrase {
+                value: Zeroizing::new(passphrase.to_owned()),
+                source: RecoveryPassphraseSource::Configuration,
+            }));
+        }
+
+        #[cfg(feature = "tron-login")]
+        if let ConfigUserAuth::Tron { key, user_id, .. } = auth {
+            let signer = key
+                .signer()
+                .map_err(|err| anyhow::anyhow!("user.tron: {err}"))?;
+            let value = signer.secret_storage_passphrase(user_id).map_err(|err| {
+                anyhow::anyhow!(
+                    "Deriving the recovery passphrase from the wallet key failed: {err}"
+                )
+            })?;
+
+            return Ok(Some(RecoveryPassphrase {
+                value,
+                source: RecoveryPassphraseSource::TronWallet,
+            }));
+        }
+
+        #[cfg(not(feature = "tron-login"))]
+        let _ = auth;
+
+        Ok(None)
+    }
+
     fn user_id(&self, homeserver_server_name: &str) -> anyhow::Result<OwnedUserId> {
         OwnedUserId::try_from(format!(
             "@{}:{}",
             self.mxid_localpart, homeserver_server_name
         ))
         .map_err(|e| anyhow::anyhow!("Invalid user ID: {e}"))
+    }
+}
+
+/// The secret storage passphrase of [`ConfigUser::recovery_passphrase`]. `Debug` prints the
+/// source only.
+pub struct RecoveryPassphrase {
+    pub value: Zeroizing<String>,
+    pub source: RecoveryPassphraseSource,
+}
+
+impl fmt::Debug for RecoveryPassphrase {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RecoveryPassphrase")
+            .field("source", &self.source)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryPassphraseSource {
+    /// `user.encryption.recovery_passphrase`.
+    Configuration,
+    /// Derived from the key of the TRON wallet the bot logs in with.
+    TronWallet,
+}
+
+impl fmt::Display for RecoveryPassphraseSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Configuration => "the configuration",
+            Self::TronWallet => "the TRON wallet key",
+        })
     }
 }
 

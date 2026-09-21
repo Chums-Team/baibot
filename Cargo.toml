@@ -19,7 +19,7 @@ default = ["tron-login"]
 # Logging in through a TRON wallet (see `src/tron_login`, docs/configuration/authentication.md).
 # Pulls in the secp256k1 / keccak / BIP-32 crates; build with `--no-default-features` to leave
 # them out.
-tron-login = ["dep:k256", "dep:bip39", "dep:bip32", "dep:sha3", "dep:bs58", "dep:zeroize"]
+tron-login = ["dep:k256", "dep:bip39", "dep:bip32", "dep:sha3", "dep:bs58"]
 
 [dependencies]
 anthropic = { git = "https://github.com/etkecc/anthropic-rs.git", branch = "fix-content-block-image" }
@@ -75,7 +75,7 @@ bip39 = { version = "2.2", default-features = false, features = ["std", "zeroize
 bip32 = { version = "0.5", default-features = false, features = ["secp256k1", "std"], optional = true }
 sha3 = { version = "0.10", default-features = false, optional = true }
 bs58 = { version = "0.5", default-features = false, features = ["std", "check"], optional = true }
-zeroize = { version = "1.8", default-features = false, features = ["alloc"], optional = true }
+zeroize = { version = "1.8", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 # `net` for the TCP listener the tron_login challenge client is tested against.

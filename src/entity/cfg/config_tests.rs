@@ -1,6 +1,9 @@
 #[cfg(feature = "tron-login")]
 use super::TronKeySource;
-use super::{Avatar, ConfigUser, ConfigUserAuth, ConfigUserEncryption, ConfigUserTron};
+use super::{
+    Avatar, ConfigUser, ConfigUserAuth, ConfigUserEncryption, ConfigUserTron,
+    RecoveryPassphraseSource,
+};
 use crate::entity::cfg::env;
 
 fn base_user() -> ConfigUser {
@@ -388,4 +391,59 @@ fn tron_section_debug_output_hides_the_key_material() {
     assert!(debug.contains("[redacted]"));
     assert!(!debug.contains(TRON_PRIVATE_KEY));
     assert!(!debug.contains("abandon"));
+}
+
+#[test]
+fn recovery_passphrase_is_none_without_configuration_or_wallet() {
+    let mut user = base_user();
+    user.password = Some("secret".to_owned());
+    let auth = user.auth_config("example.com").unwrap();
+
+    assert!(user.recovery_passphrase(&auth).unwrap().is_none());
+}
+
+#[test]
+fn recovery_passphrase_comes_from_the_configuration() {
+    let mut user = base_user();
+    user.password = Some("secret".to_owned());
+    user.encryption.recovery_passphrase = Some("long-and-secure".to_owned());
+    let auth = user.auth_config("example.com").unwrap();
+
+    let passphrase = user.recovery_passphrase(&auth).unwrap().unwrap();
+
+    assert_eq!(*passphrase.value, "long-and-secure");
+    assert_eq!(passphrase.source, RecoveryPassphraseSource::Configuration);
+    assert!(!format!("{passphrase:?}").contains("long-and-secure"));
+}
+
+#[cfg(feature = "tron-login")]
+#[test]
+fn recovery_passphrase_is_derived_from_the_tron_wallet() {
+    use crate::tron_login::TronSigner;
+    use mxlink::matrix_sdk::ruma::UserId;
+
+    let user = tron_user(None, Some(TRON_SEED_PHRASE));
+    let auth = user.auth_config("example.com").unwrap();
+
+    let passphrase = user.recovery_passphrase(&auth).unwrap().unwrap();
+
+    let expected = TronSigner::from_private_key_hex(TRON_PRIVATE_KEY)
+        .unwrap()
+        .secret_storage_passphrase(UserId::parse("@baibot:example.com").unwrap().as_ref())
+        .unwrap();
+    assert_eq!(*passphrase.value, *expected);
+    assert_eq!(passphrase.source, RecoveryPassphraseSource::TronWallet);
+}
+
+#[cfg(feature = "tron-login")]
+#[test]
+fn a_configured_recovery_passphrase_wins_over_the_tron_wallet() {
+    let mut user = tron_user(Some(TRON_PRIVATE_KEY), None);
+    user.encryption.recovery_passphrase = Some("explicit".to_owned());
+    let auth = user.auth_config("example.com").unwrap();
+
+    let passphrase = user.recovery_passphrase(&auth).unwrap().unwrap();
+
+    assert_eq!(*passphrase.value, "explicit");
+    assert_eq!(passphrase.source, RecoveryPassphraseSource::Configuration);
 }
