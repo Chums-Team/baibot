@@ -494,6 +494,8 @@ mod tests {
             "cc.chums.x402_topup_confirmed"
         );
         assert_eq!(EVENT_TYPE_SET_USER_LOCALE, "cc.chums.set_user_locale");
+        assert_eq!(EVENT_TYPE_X402_SUBMIT, "cc.chums.x402_submit");
+        assert_eq!(EVENT_TYPE_X402_ERROR, "cc.chums.x402_error");
     }
 
     /// The inbound event: what the client sends when the user picks a language.
@@ -510,5 +512,72 @@ mod tests {
         let extended: SetUserLocaleContent =
             serde_json::from_value(json!({ "locale": "de", "source": "settings" })).unwrap();
         assert_eq!(extended.locale, "de");
+    }
+
+    /// The inbound event of a payment: what the client sends after signing the permit.
+    #[test]
+    fn x402_submit_parses_the_client_event() {
+        use mxlink::matrix_sdk::ruma::events::MessageLikeEventContent as _;
+
+        let content: X402SubmitContent = serde_json::from_value(json!({
+            "payment_id": "6f1e2a3b-4c5d-6e7f-8091-a2b3c4d5e6f7",
+            "buyer_address": "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH",
+            "signature_hex": "0xdeadbeef",
+        }))
+        .unwrap();
+        assert_eq!(
+            content.payment_id.to_string(),
+            "6f1e2a3b-4c5d-6e7f-8091-a2b3c4d5e6f7"
+        );
+        assert_eq!(content.permit_payload, None);
+        assert_eq!(content.event_type().to_string(), EVENT_TYPE_X402_SUBMIT);
+
+        // The echoed envelope is optional, and unknown fields do not break the parse.
+        let with_envelope: X402SubmitContent = serde_json::from_value(json!({
+            "payment_id": "6f1e2a3b-4c5d-6e7f-8091-a2b3c4d5e6f7",
+            "buyer_address": "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH",
+            "signature_hex": "deadbeef",
+            "permit_payload": { "message": { "value": "1000000" } },
+            "client": "chums-web",
+        }))
+        .unwrap();
+        assert_eq!(
+            with_envelope.permit_payload.unwrap()["message"]["value"],
+            "1000000"
+        );
+
+        // A malformed payment_id is a parse error, not a silently empty value.
+        let bad: Result<X402SubmitContent, _> = serde_json::from_value(json!({
+            "payment_id": "not-a-uuid",
+            "buyer_address": "T…",
+            "signature_hex": "0x",
+        }));
+        assert!(bad.is_err());
+    }
+
+    /// The error codes are a contract: the client maps them to localized texts.
+    #[test]
+    fn x402_error_serializes_snake_case_codes() {
+        let content = X402ErrorContent {
+            payment_id: Uuid::nil(),
+            code: X402ErrorCode::FacilitatorRejected,
+            reason: Some("insufficient allowance".into()),
+        };
+        let value = serde_json::to_value(&content).unwrap();
+        assert_eq!(value["code"], "facilitator_rejected");
+        assert_eq!(value["reason"], "insufficient allowance");
+        assert_eq!(value["payment_id"], Uuid::nil().to_string());
+
+        let without_reason = X402ErrorContent {
+            payment_id: Uuid::nil(),
+            code: X402ErrorCode::WrongSender,
+            reason: None,
+        };
+        let value = serde_json::to_value(&without_reason).unwrap();
+        assert_eq!(value["code"], "wrong_sender");
+        assert!(value.get("reason").is_none());
+
+        let back: X402ErrorContent = serde_json::from_value(value).unwrap();
+        assert_eq!(back, without_reason);
     }
 }

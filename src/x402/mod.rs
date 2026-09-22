@@ -5,7 +5,9 @@
 //!
 //! - **Outbound**: `client` asks the sidecar (`POST /payment-request`) for a payment request
 //!   and shapes the answer into a `cc.chums.x402_request` event, which the Chums client
-//!   renders as a payment widget.
+//!   renders as a payment widget. The same client forwards the signature the payer sends back
+//!   as a `cc.chums.x402_submit` event (`POST /payment-request/submit`, after a
+//!   `GET /status/{payment_id}` check); see `src/bot/x402.rs`.
 //! - **Inbound**: `webhook` receives the sidecar's HMAC-signed `POST /internal/x402-settled`
 //!   after a payment settles, credits the room in the ledger and hands the bot an
 //!   announcement to post into the room. `server` binds the endpoint.
@@ -17,6 +19,6 @@ mod server;
 mod types;
 mod webhook;
 
-pub use client::X402Client;
+pub use client::{PaymentSubmit, X402Client};
 pub use server::start_webhook_server;
 pub use webhook::{TopupAnnouncement, WebhookState};

@@ -319,6 +319,7 @@ impl Bot {
         self.messaging().attach_event_handlers().await;
         self.reacting().attach_event_handlers().await;
         self.attach_user_locale_event_handler();
+        self.attach_x402_submit_event_handler();
 
         self.inner.delayed_catch_up_marker_manager.start().await;
 

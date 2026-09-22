@@ -2,7 +2,7 @@
 
 When [billing](./configuration/billing.md) is enabled, the bot talks to the Chums client through custom Matrix events under the `cc.chums.*` namespace. They are plain message-like events (not state events). The Chums client registers a handler per event `type` and renders a widget instead of a text bubble; other clients ignore the events and only see the plain text message the bot sends alongside.
 
-One event goes the other way: the client sends [`cc.chums.set_user_locale`](#ccchumsset_user_locale-client--bot) to tell the bot the user's language.
+Two events go the other way: the client sends [`cc.chums.set_user_locale`](#ccchumsset_user_locale-client--bot) to tell the bot the user's language, and [`cc.chums.x402_submit`](#ccchumsx402_submit-client--bot) to hand the bot a signed payment.
 
 The Rust source of truth is [`src/matrix/events.rs`](../src/matrix/events.rs). The tests in that file lock the wire shape: the event type strings and field names are a contract with the client, and any change needs a coordinated client release.
 
@@ -76,6 +76,54 @@ A payment settled on-chain and was credited to the room.
 
 The bot also sends a plain text confirmation for clients that do not recognize the event.
 
+### `cc.chums.x402_submit` (client → bot)
+
+Sent by the payer's client into the room of the payment, after the user signed the permit of a `cc.chums.x402_request`. The bot forwards it to its own payment sidecar, which is not reachable from a user's device; the event also addresses the right bot when several bots share a host.
+
+```json
+{
+  "type": "cc.chums.x402_submit",
+  "content": {
+    "payment_id": "0192ab99-a000-7000-8000-000000000001",
+    "buyer_address": "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH",
+    "signature_hex": "0x…",
+    "permit_payload": { "…": "the signed envelope, optional" }
+  }
+}
+```
+
+The sender of the event is the payer: the bot checks it, and the room, against its sidecar's payment record (`GET /status/{payment_id}`) and refuses anything that does not match. `permit_payload` is an optional echo of the signed envelope; the sidecar compares it with the one it issued and never builds the authorization from it.
+
+A successful submit is not acknowledged. The confirmation is the `cc.chums.x402_topup_confirmed` event that follows once the payment settles on-chain, which may take a while. Anything that went wrong comes back as `cc.chums.x402_error`.
+
+### `cc.chums.x402_error`
+
+The bot could not forward a `cc.chums.x402_submit`, or the sidecar refused it. Sent into the same room so the client can stop waiting and show the reason.
+
+```json
+{
+  "type": "cc.chums.x402_error",
+  "content": {
+    "payment_id": "0192ab99-a000-7000-8000-000000000001",
+    "code": "facilitator_rejected",
+    "reason": "insufficient_allowance: approve more USDT"
+  }
+}
+```
+
+| `code` | Meaning |
+|---|---|
+| `unknown_payment` | No payment with this id. A payment issued by another bot looks the same way. |
+| `wrong_room` | The payment was requested in another room. |
+| `wrong_sender` | The payment was requested for another user. |
+| `expired` | The permit is past `expires_at`, or the payment is no longer payable. |
+| `bad_request` | The sidecar refused the signature, the address or the echoed envelope. |
+| `facilitator_rejected` | The facilitator refused to verify or settle. The permit stays payable until it expires, so a retry makes sense. |
+| `sidecar_unavailable` | The bot could not reach its sidecar, or the sidecar failed internally. |
+| `internal` | Anything else on the bot's side. |
+
+`reason` is optional diagnostic detail for a human and carries no secrets; the client localizes `code` and may show `reason` next to it.
+
 ### `cc.chums.set_user_locale` (client → bot)
 
 Sent by the user's client into any room shared with the bot when the user picks a language, and again on start-up (the bot does not persist it). The sender of the event is the user whose locale it is; the bot replies to that user in this language from then on. See [🌍 Localization](./configuration/i18n.md).
@@ -93,6 +141,6 @@ Sent by the user's client into any room shared with the bot when the user picks 
 
 ### Implementation notes
 
-- Outbound events are sent with `Room::send_raw(event_type, content)`. Encrypted rooms work transparently: matrix-sdk encrypts the content regardless of the event type. The inbound event is a typed `EventContent` and arrives through a matrix-sdk event handler.
+- Outbound events are sent with `Room::send_raw(event_type, content)`. Encrypted rooms work transparently: matrix-sdk encrypts the content regardless of the event type. Inbound events are typed `EventContent`s and arrive through matrix-sdk event handlers.
 - The bot does not expect the client to acknowledge an event. Idempotency is decided by the ledger: a `topup` row is written at most once per `payment_id`.
 - New events should also live under `cc.chums.*`, be defined in `src/matrix/events.rs`, and get the same shape-locking tests.

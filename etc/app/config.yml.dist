@@ -103,17 +103,23 @@ persistence:
 
   # An optional secret for encrypting the bot's session data (stored in data_dir_path).
   # This must be 32-bytes (64 characters when HEX-encoded).
-  # Generate it with: `openssl rand -hex 32`
+  # Generate it with: `openssl rand -hex 32`, or pass it as
+  # BAIBOT_PERSISTENCE_SESSION_ENCRYPTION_KEY and leave this null.
+  # Never copy a key out of a file that is published somewhere: this one is
+  # left unset on purpose.
   # Leave null or empty to avoid using encryption.
   # Changing this subsequently requires that you also throw away all data stored in data_dir_path.
-  session_encryption_key: 9701cd109ed56770687dd8410f7d7371a4390dd3feb8ed721f189a0756c40098
+  session_encryption_key: null
 
   # An optional secret for encrypting bot configuration stored in Matrix's account data.
   # This must be 32-bytes (64 characters when HEX-encoded).
-  # Generate it with: `openssl rand -hex 32`
+  # Generate it with: `openssl rand -hex 32`, or pass it as
+  # BAIBOT_PERSISTENCE_CONFIG_ENCRYPTION_KEY and leave this null.
+  # Never copy a key out of a file that is published somewhere: this one is
+  # left unset on purpose.
   # Leave null or empty to avoid using encryption.
   # Changing this subsequently will make you lose your configuration.
-  config_encryption_key: a9f1df98d288802ead20a8be2c701a627eabd31cf3d9e2aea28867ccd7a4ded7
+  config_encryption_key: null
 
 agents:
   # A list of statically-defined agents.

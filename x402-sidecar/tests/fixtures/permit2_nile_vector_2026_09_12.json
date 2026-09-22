@@ -1,5 +1,5 @@
 {
-  "_about": "Ground-truth vector captured 2026-09-12 against the hosted BofAI x402 facilitator v2 on TRON nile. Signed by test buyer TGVvAYNsroS1c25q2gvmoSFkvEdy3Qdmbz (key in scripts/, gitignored). /verify -> isValid, /settle -> tx f026a093... (block 70909072, Transfer 10000 micro-USDT buyer->agent). Use to pin our EIP-712 encoder + wire shape; do not edit.",
+  "_about": "Ground-truth vector captured 2026-09-12 against the hosted BofAI x402 facilitator v2 on TRON nile. Signed by throwaway test buyer TGVvAYNsroS1c25q2gvmoSFkvEdy3Qdmbz; its key is not in this repository and never was. /verify -> isValid, /settle -> tx f026a093... (block 70909072, Transfer 10000 micro-USDT buyer->agent). Use to pin our EIP-712 encoder + wire shape; do not edit.",
   "network": "tron:0xcd8690dc",
   "buyer_base58": "TGVvAYNsroS1c25q2gvmoSFkvEdy3Qdmbz",
   "domain": {

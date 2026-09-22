@@ -4,6 +4,11 @@
 //! calls `POST {sidecar_url}/payment-request` and forwards the answer to the Chums client as a
 //! `cc.chums.x402_request` event, so the user can sign the payment in their wallet.
 //!
+//! Two more calls serve the payment the user signs: `GET /status/{payment_id}` tells the bot
+//! whose payment it is and in which room, and `POST /payment-request/submit` hands the sidecar
+//! the signature that arrived as a `cc.chums.x402_submit` event. Both are used by the handler in
+//! `src/bot/x402.rs`.
+//!
 //! The wire shape mirrors `PaymentRequestIn` / `PaymentRequestOut` in
 //! `x402-sidecar/src/x402_sidecar/models.py`. The two sides must stay in sync: the
 //! sidecar rejects unknown request fields.
@@ -66,6 +71,51 @@ pub struct PaymentResponse {
     pub facilitator_reason: Option<String>,
 }
 
+
+/// The fields of `PaymentStatusOut` (`GET /status/{payment_id}`) the bot needs to decide whether
+/// a submitted signature may be forwarded: whose payment it is, in which room, and whether it is
+/// still payable.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PaymentStatus {
+    /// `pending` | `settled` | `expired` | `failed`.
+    pub status: String,
+    pub room_id: String,
+    pub user_mxid: String,
+    #[serde(default)]
+    pub tx_hash: Option<String>,
+}
+
+/// `POST /payment-request/submit` body, mirroring `PaymentSubmitIn` of the sidecar.
+#[derive(Debug, Serialize)]
+pub struct PaymentSubmit {
+    pub payment_id: Uuid,
+    pub buyer_address: String,
+    pub signature_hex: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permit_payload: Option<Value>,
+}
+
+/// What the sidecar answered to a submit. Any HTTP status is an outcome, not an error: only a
+/// transport failure produces `Err`, so the caller can map a status to an error code for the
+/// client.
+#[derive(Debug, Clone)]
+pub struct SubmitOutcome {
+    pub status: u16,
+    /// `next_step` of `PaymentSubmitOut`: `settled`, `already-settled`, `awaiting-live-wiring`,
+    /// `verify-failed`, `settle-failed`. Absent when the sidecar answered with a plain detail.
+    pub next_step: Option<String>,
+    pub tx_hash: Option<String>,
+    /// `error_reason` / `error_message` of `PaymentSubmitOut`, or FastAPI's `detail`.
+    pub detail: Option<String>,
+}
+
+impl SubmitOutcome {
+    /// The sidecar took the payment: it is settled, or it was already settled before.
+    pub fn is_accepted(&self) -> bool {
+        (200..300).contains(&self.status)
+    }
+}
+
 impl X402Client {
     /// The sidecar runs next to the bot and answers in well under a second; the timeouts only
     /// keep a stuck sidecar from blocking a chat reply forever.
@@ -105,6 +155,71 @@ impl X402Client {
         }
         let parsed = resp.json::<PaymentResponse>().await?;
         Ok(parsed)
+    }
+
+    /// `GET /status/{payment_id}`. `Ok(None)` means the sidecar does not know this payment,
+    /// which is the normal answer for a payment issued by another bot.
+    pub async fn payment_status(
+        &self,
+        payment_id: Uuid,
+    ) -> Result<Option<PaymentStatus>, X402ClientError> {
+        let url = format!("{}/status/{}", self.sidecar_url, payment_id);
+        let resp = self.http.get(&url).send().await?;
+        let status = resp.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(X402ClientError::BadStatus {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        Ok(Some(resp.json::<PaymentStatus>().await?))
+    }
+
+    /// `POST /payment-request/submit`: hands the sidecar the signature the payer produced.
+    /// The settlement itself is announced later through the webhook, not in this answer.
+    pub async fn submit_signed_permit(
+        &self,
+        req: &PaymentSubmit,
+    ) -> Result<SubmitOutcome, X402ClientError> {
+        let url = format!("{}/payment-request/submit", self.sidecar_url);
+        let resp = self.http.post(&url).json(req).send().await?;
+        let status = resp.status().as_u16();
+        let body = resp.text().await.unwrap_or_default();
+        let value: Option<Value> = serde_json::from_str(&body).ok();
+
+        let (next_step, tx_hash, detail) = match value {
+            Some(v) => {
+                let text = |key: &str| {
+                    v.get(key)
+                        .and_then(Value::as_str)
+                        .map(str::to_owned)
+                        .filter(|s| !s.is_empty())
+                };
+                let detail = text("error_reason")
+                    .map(|reason| match text("error_message") {
+                        Some(message) => format!("{reason}: {message}"),
+                        None => reason,
+                    })
+                    .or_else(|| text("detail"));
+                (text("next_step"), text("tx_hash"), detail)
+            }
+            None => (
+                None,
+                None,
+                Some(body.chars().take(200).collect::<String>()).filter(|s| !s.is_empty()),
+            ),
+        };
+
+        Ok(SubmitOutcome {
+            status,
+            next_step,
+            tx_hash,
+            detail,
+        })
     }
 
     /// Asks the sidecar for a payment of `amount_usd` by `user_mxid` into `room_id` and shapes
@@ -147,7 +262,12 @@ impl X402Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
+    use axum::{
+        Json, Router,
+        extract::{Path, State},
+        http::StatusCode,
+        routing::{get, post},
+    };
     use serde_json::json;
     use std::net::SocketAddr;
     use std::sync::{Arc, Mutex};
@@ -181,8 +301,62 @@ mod tests {
             (StatusCode::OK, Json(resp))
         }
 
+        // `/status/{id}`: a known payment for `@u:example.com` in `!r:example.com`, anything
+        // else unknown. `/payment-request/submit`: the answer is driven by the signature, so a
+        // test can ask for a refusal without a second mock.
+        async fn status(Path(payment_id): Path<String>) -> (StatusCode, Json<Value>) {
+            if payment_id == "0192ab99-a000-7000-8000-000000000001" {
+                return (
+                    StatusCode::OK,
+                    Json(json!({
+                        "payment_id": payment_id,
+                        "status": "pending",
+                        "room_id": "!r:example.com",
+                        "user_mxid": "@u:example.com",
+                        "amount_usd": 0.10,
+                        "expires_at": "2030-01-01T00:00:00Z",
+                        "created_at": "2020-01-01T00:00:00Z",
+                    })),
+                );
+            }
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "detail": "unknown payment_id" })),
+            )
+        }
+
+        async fn submit(Json(body): Json<Value>) -> (StatusCode, Json<Value>) {
+            match body["signature_hex"].as_str().unwrap_or_default() {
+                "0xrefused" => (
+                    StatusCode::PAYMENT_REQUIRED,
+                    Json(json!({
+                        "accepted": false,
+                        "payment_id": body["payment_id"],
+                        "next_step": "verify-failed",
+                        "error_reason": "insufficient_allowance",
+                        "error_message": "approve more USDT",
+                    })),
+                ),
+                "0xexpired" => (
+                    StatusCode::GONE,
+                    Json(json!({ "detail": "payment_id expired — request a fresh permit" })),
+                ),
+                _ => (
+                    StatusCode::OK,
+                    Json(json!({
+                        "accepted": true,
+                        "payment_id": body["payment_id"],
+                        "next_step": "settled",
+                        "tx_hash": "0xfeed",
+                    })),
+                ),
+            }
+        }
+
         let app = Router::new()
             .route("/payment-request", post(handler))
+            .route("/payment-request/submit", post(submit))
+            .route("/status/:payment_id", get(status))
             .with_state(captured);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -349,4 +523,54 @@ mod tests {
         let c = X402Client::new("http://localhost:8402//").unwrap();
         assert_eq!(c.sidecar_url, "http://localhost:8402");
     }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn payment_status_tells_owner_and_room_and_maps_404_to_none() {
+        let addr = spawn_mock_sidecar(Arc::new(Mutex::new(Vec::new()))).await;
+        let client = X402Client::new(format!("http://{addr}")).unwrap();
+
+        let known = Uuid::parse_str("0192ab99-a000-7000-8000-000000000001").unwrap();
+        let status = client.payment_status(known).await.unwrap().unwrap();
+        assert_eq!(status.status, "pending");
+        assert_eq!(status.room_id, "!r:example.com");
+        assert_eq!(status.user_mxid, "@u:example.com");
+
+        // A payment of another bot is "not found", not an error: the handler stays quiet
+        // instead of failing the event.
+        assert!(client.payment_status(Uuid::nil()).await.unwrap().is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn submit_signed_permit_reports_every_answer_as_an_outcome() {
+        let addr = spawn_mock_sidecar(Arc::new(Mutex::new(Vec::new()))).await;
+        let client = X402Client::new(format!("http://{addr}")).unwrap();
+        let payment_id = Uuid::parse_str("0192ab99-a000-7000-8000-000000000001").unwrap();
+
+        let submit = |signature: &str| PaymentSubmit {
+            payment_id,
+            buyer_address: "TSkeaPMSuaojcCzE7mWqw4xN1awU7NfdfY".into(),
+            signature_hex: signature.into(),
+            permit_payload: None,
+        };
+
+        let ok = client.submit_signed_permit(&submit("0xdeadbeef")).await.unwrap();
+        assert!(ok.is_accepted());
+        assert_eq!(ok.next_step.as_deref(), Some("settled"));
+        assert_eq!(ok.tx_hash.as_deref(), Some("0xfeed"));
+
+        // 402: the facilitator refused. Both halves of the reason reach the client.
+        let refused = client.submit_signed_permit(&submit("0xrefused")).await.unwrap();
+        assert!(!refused.is_accepted());
+        assert_eq!(refused.status, 402);
+        assert_eq!(
+            refused.detail.as_deref(),
+            Some("insufficient_allowance: approve more USDT")
+        );
+
+        // 410: FastAPI's plain `detail` is carried through as well.
+        let expired = client.submit_signed_permit(&submit("0xexpired")).await.unwrap();
+        assert_eq!(expired.status, 410);
+        assert!(expired.detail.unwrap().contains("expired"));
+    }
+
 }

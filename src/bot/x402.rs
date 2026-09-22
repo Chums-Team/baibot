@@ -1,14 +1,25 @@
 //! The Matrix side of x402 top-ups: brings up the webhook server the payment sidecar posts
-//! settlements to, and announces every credited top-up in its room.
+//! settlements to, announces every credited top-up in its room, and forwards the signatures
+//! payers send as `cc.chums.x402_submit` events to the instance's own sidecar.
+//!
+//! The submit path exists because the sidecar is not reachable from a user's device: it listens
+//! on the instance's Docker network and, at most, on the host's loopback. The bot is already in
+//! the room and already talks to its sidecar, so the event addresses the right instance by
+//! construction, even with several bots on one host.
 
 use std::sync::Arc;
 
 use mxlink::MessageResponseType;
+use mxlink::matrix_sdk::Room;
+use mxlink::matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent;
 use mxlink::matrix_sdk::ruma::{RoomId, UserId};
 
-use crate::matrix::events::{X402TopupConfirmedContent, emit_x402_topup_confirmed};
+use crate::matrix::events::{
+    X402ErrorCode, X402ErrorContent, X402SubmitContent, X402TopupConfirmedContent,
+    emit_x402_error, emit_x402_topup_confirmed,
+};
 use crate::strings;
-use crate::x402::{TopupAnnouncement, WebhookState, start_webhook_server};
+use crate::x402::{PaymentSubmit, TopupAnnouncement, WebhookState, start_webhook_server};
 
 use super::Bot;
 
@@ -45,6 +56,164 @@ impl Bot {
         });
 
         Ok(())
+    }
+
+    /// Registers the handler for `cc.chums.x402_submit`, the event a payer's client sends after
+    /// signing the permit. Registered unconditionally: when x402 is off, the handler only logs.
+    pub(super) fn attach_x402_submit_event_handler(&self) {
+        let bot = self.clone();
+
+        self.matrix_link().client().add_event_handler(
+            move |event: OriginalSyncMessageLikeEvent<X402SubmitContent>, room: Room| {
+                let bot = bot.clone();
+                async move {
+                    bot.handle_x402_submit(event, room).await;
+                }
+            },
+        );
+    }
+
+    /// Checks that the payment belongs to this bot, this room and this sender, then hands the
+    /// signature to the sidecar. A successful submit produces no event: the confirmation comes
+    /// later through the settlement webhook as `cc.chums.x402_topup_confirmed`. Anything else
+    /// is reported to the room as `cc.chums.x402_error`, so the client can stop waiting.
+    async fn handle_x402_submit(
+        &self,
+        event: OriginalSyncMessageLikeEvent<X402SubmitContent>,
+        room: Room,
+    ) {
+        let payment_id = event.content.payment_id;
+        let sender = event.sender;
+
+        let Some(client) = self.x402_client() else {
+            tracing::debug!(%payment_id, %sender, "x402 submit ignored: x402 is not configured");
+            return;
+        };
+
+        // The payment record is the only source of truth about who may pay and where.
+        let status = match client.payment_status(payment_id).await {
+            Ok(Some(status)) => status,
+            Ok(None) => {
+                tracing::info!(%payment_id, %sender, "x402 submit rejected: unknown payment");
+                self.send_x402_error(&room, payment_id, X402ErrorCode::UnknownPayment, None)
+                    .await;
+                return;
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, %payment_id, "x402 submit: payment status lookup failed");
+                self.send_x402_error(
+                    &room,
+                    payment_id,
+                    X402ErrorCode::SidecarUnavailable,
+                    Some(e.to_string()),
+                )
+                .await;
+                return;
+            }
+        };
+
+        if status.room_id != room.room_id().as_str() {
+            tracing::warn!(
+                %payment_id,
+                %sender,
+                event_room = %room.room_id(),
+                "x402 submit rejected: the payment belongs to another room",
+            );
+            self.send_x402_error(&room, payment_id, X402ErrorCode::WrongRoom, None)
+                .await;
+            return;
+        }
+
+        if status.user_mxid != sender.as_str() {
+            tracing::warn!(
+                %payment_id,
+                %sender,
+                "x402 submit rejected: the payment was requested for another user",
+            );
+            self.send_x402_error(&room, payment_id, X402ErrorCode::WrongSender, None)
+                .await;
+            return;
+        }
+
+        if status.status == "settled" {
+            tracing::info!(
+                %payment_id,
+                tx_hash = ?status.tx_hash,
+                "x402 submit ignored: the payment is already settled",
+            );
+            return;
+        }
+
+        let outcome = match client
+            .submit_signed_permit(&PaymentSubmit {
+                payment_id,
+                buyer_address: event.content.buyer_address,
+                signature_hex: event.content.signature_hex,
+                permit_payload: event.content.permit_payload,
+            })
+            .await
+        {
+            Ok(outcome) => outcome,
+            Err(e) => {
+                tracing::warn!(error = %e, %payment_id, "x402 submit: the sidecar call failed");
+                self.send_x402_error(
+                    &room,
+                    payment_id,
+                    X402ErrorCode::SidecarUnavailable,
+                    Some(e.to_string()),
+                )
+                .await;
+                return;
+            }
+        };
+
+        if outcome.is_accepted() {
+            tracing::info!(
+                %payment_id,
+                %sender,
+                next_step = ?outcome.next_step,
+                tx_hash = ?outcome.tx_hash,
+                "x402 submit forwarded to the sidecar",
+            );
+            return;
+        }
+
+        // The permit stays payable on a facilitator refusal, so the user may retry until it
+        // expires; the other codes are final for this payment_id.
+        let code = match outcome.status {
+            400 | 409 => X402ErrorCode::BadRequest,
+            402 => X402ErrorCode::FacilitatorRejected,
+            404 => X402ErrorCode::UnknownPayment,
+            410 => X402ErrorCode::Expired,
+            status if status >= 500 => X402ErrorCode::SidecarUnavailable,
+            _ => X402ErrorCode::Internal,
+        };
+        tracing::warn!(
+            %payment_id,
+            %sender,
+            status = outcome.status,
+            detail = ?outcome.detail,
+            "x402 submit refused by the sidecar",
+        );
+        self.send_x402_error(&room, payment_id, code, outcome.detail)
+            .await;
+    }
+
+    async fn send_x402_error(
+        &self,
+        room: &Room,
+        payment_id: uuid::Uuid,
+        code: X402ErrorCode,
+        reason: Option<String>,
+    ) {
+        let content = X402ErrorContent {
+            payment_id,
+            code,
+            reason,
+        };
+        if let Err(e) = emit_x402_error(room, &content).await {
+            tracing::warn!(error = %e, %payment_id, "emit_x402_error failed");
+        }
     }
 
     /// Posts a `cc.chums.x402_topup_confirmed` event and a plain text confirmation for every
