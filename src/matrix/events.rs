@@ -9,10 +9,15 @@
 //! - `cc.chums.x402_topup_confirmed`: a payment settled and the room balance was updated. The client
 //!   renders a success bubble.
 //!
-//! One event goes the other way, from the client to the bot:
+//! - `cc.chums.x402_error`: the bot refused, or could not forward, a payment the client
+//!   submitted. The client shows the reason on the pay-widget.
+//!
+//! Two events go the other way, from the client to the bot:
 //!
 //! - `cc.chums.set_user_locale`: the user's client declares the language of the bot's replies to
 //!   that user. See `src/i18n`.
+//! - `cc.chums.x402_submit`: the signed permit for a payment the bot requested. The bot forwards
+//!   it to its own sidecar; see `src/bot/x402.rs`.
 //!
 //! The wire format is plain JSON. The event type strings and field names are a contract with the
 //! client; the tests in this module lock the wire shape, and any change needs a coordinated client
@@ -27,6 +32,8 @@ pub const EVENT_TYPE_X402_REQUEST: &str = "cc.chums.x402_request";
 pub const EVENT_TYPE_CAP_HIT: &str = "cc.chums.cap_hit";
 pub const EVENT_TYPE_X402_TOPUP_CONFIRMED: &str = "cc.chums.x402_topup_confirmed";
 pub const EVENT_TYPE_SET_USER_LOCALE: &str = "cc.chums.set_user_locale";
+pub const EVENT_TYPE_X402_SUBMIT: &str = "cc.chums.x402_submit";
+pub const EVENT_TYPE_X402_ERROR: &str = "cc.chums.x402_error";
 
 /// USD amounts on the Matrix wire are decimal **strings** (`"1.000000"`), never JSON numbers.
 ///
@@ -175,6 +182,63 @@ pub struct SetUserLocaleContent {
     pub locale: String,
 }
 
+/// Body of `cc.chums.x402_submit`, sent by the payer's client into the room the payment was
+/// requested in. Carries the signature over the `permit_payload` of the matching
+/// `cc.chums.x402_request`; the bot forwards it to its own sidecar (`src/bot/x402.rs`).
+///
+/// The sender of the event is the payer: the bot checks it against the payment record rather
+/// than trusting any field here.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EventContent)]
+#[ruma_event(type = "cc.chums.x402_submit", kind = MessageLike)]
+pub struct X402SubmitContent {
+    /// The `payment_id` of the `cc.chums.x402_request` being paid.
+    pub payment_id: Uuid,
+    /// TRON address of the signer, Base58 or 0x-hex. Validated by the sidecar.
+    pub buyer_address: String,
+    /// 65-byte recoverable secp256k1 signature, hex, `0x` prefix optional.
+    pub signature_hex: String,
+    /// Optional echo of the signed envelope. The sidecar compares it with the one it issued and
+    /// rejects a mismatch; it never builds the authorization from it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permit_payload: Option<serde_json::Value>,
+}
+
+/// Why a `cc.chums.x402_submit` did not reach settlement. Stable strings: the client maps them
+/// to localized messages, so renaming one needs a coordinated client release.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum X402ErrorCode {
+    /// No payment with this id. A different bot's payment looks the same way.
+    UnknownPayment,
+    /// The payment was requested in another room.
+    WrongRoom,
+    /// The payment was requested for another user.
+    WrongSender,
+    /// The permit is past `expires_at`, or the payment is no longer payable.
+    Expired,
+    /// The sidecar refused the signature, the address or the echoed envelope.
+    BadRequest,
+    /// The facilitator refused to verify or settle. The permit stays payable until it expires.
+    FacilitatorRejected,
+    /// The bot could not reach its sidecar, or the sidecar failed internally.
+    SidecarUnavailable,
+    /// Anything else on the bot's side.
+    Internal,
+}
+
+/// Body of `cc.chums.x402_error`. Sent into the room in reply to a `cc.chums.x402_submit` that
+/// did not go through. A successful payment produces no event here: the confirmation arrives as
+/// `cc.chums.x402_topup_confirmed` once the settlement webhook lands.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct X402ErrorContent {
+    pub payment_id: Uuid,
+    pub code: X402ErrorCode,
+    /// Diagnostic detail for a human, never a secret. The client shows it next to the localized
+    /// text of `code`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum EmitError {
     #[error("serializing event content failed: {0}")]
@@ -202,6 +266,14 @@ pub async fn emit_x402_topup_confirmed(
     content: &X402TopupConfirmedContent,
 ) -> Result<OwnedEventId, EmitError> {
     send_raw(room, EVENT_TYPE_X402_TOPUP_CONFIRMED, content).await
+}
+
+/// Sends `cc.chums.x402_error` into the room. Returns the id of the sent event.
+pub async fn emit_x402_error(
+    room: &Room,
+    content: &X402ErrorContent,
+) -> Result<OwnedEventId, EmitError> {
+    send_raw(room, EVENT_TYPE_X402_ERROR, content).await
 }
 
 async fn send_raw<T: Serialize>(
